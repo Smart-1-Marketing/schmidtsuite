@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schmidt's Marketing Hot Sheet</title>
+  <style>
+    :root {
+      --red: #9f1d20;
+      --dark-red: #7d1417;
+      --gold: #b38a3d;
+      --cream: #f7f3ea;
+      --light: #f6f6f6;
+      --border: #dddddd;
+      --text: #222222;
+      --muted: #747474;
+      --green: #18864b;
+      --orange: #c87b12;
+      --blue: #2467b2;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f3f3f3;
+      color: var(--text);
+    }
+    button, input, select { font: inherit; }
+    .dashboard { max-width: 1450px; margin: 0 auto; padding: 25px; }
+    .top-header {
+      background: var(--white);
+      padding: 25px 28px;
+      border-radius: 14px;
+      border-top: 5px solid var(--red);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 20px;
+    }
+    .brand-small {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--gold); margin-bottom: 6px; font-weight: bold;
+    }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; }
+    h1 { color: var(--red); margin: 0; font-size: 32px; }
+    .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 14px; }
+    .header-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      border: 1px solid var(--border); background: var(--white);
+      border-radius: 8px; padding: 10px 15px; cursor: pointer; transition: 0.2s;
+    }
+    .btn:hover { background: #f2f2f2; }
+    .btn-primary { background: var(--red); color: var(--white); border-color: var(--red); }
+    .btn-primary:hover { background: var(--dark-red); }
+    .btn[disabled] { opacity: 0.6; cursor: wait; }
+    .tabs {
+      background: var(--white); padding: 10px; border-radius: 12px;
+      margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .tab {
+      border: 0; background: transparent; padding: 11px 18px;
+      border-radius: 25px; cursor: pointer; color: #444; font-weight: 600;
+    }
+    .tab.active { background: var(--red); color: var(--white); }
+    .tab .count {
+      display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 6px;
+      border-radius: 12px; background: #fde8e8; color: var(--red); font-size: 12px;
+    }
+    .tab.active .count { background: var(--white); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .section-header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 20px; margin-bottom: 15px;
+    }
+    .section-header h2 { margin: 0; color: var(--red); font-size: 25px; }
+    .section-note { color: var(--muted); font-size: 13px; }
+    .metric-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 14px; margin-bottom: 22px;
+    }
+    .metric-card {
+      background: var(--white); border-radius: 12px; padding: 18px;
+      border: 1px solid #e2e2e2;
+    }
+    .metric-label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .metric-value { font-size: 29px; font-weight: bold; margin-bottom: 5px; }
+    .metric-change { font-size: 13px; }
+    .up { color: var(--green); }
+    .down { color: var(--red); }
+    .neutral { color: var(--muted); }
+    .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .three-column { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card {
+      background: var(--white); border-radius: 12px; padding: 20px;
+      border: 1px solid #e1e1e1; margin-bottom: 18px;
+    }
+    .card h3 { margin-top: 0; margin-bottom: 15px; color: var(--red); font-size: 21px; }
+    .highlight-row {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 15px; border-bottom: 1px solid #eeeeee; padding: 13px 0;
+    }
+    .highlight-row:last-child { border-bottom: 0; }
+    .highlight-row span:first-child { color: var(--muted); }
+    .alert-box {
+      border: 1px solid #e3e3e3; padding: 13px; border-radius: 9px;
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px;
+    }
+    .badge {
+      display: inline-block; padding: 5px 9px; border-radius: 15px;
+      font-size: 11px; text-transform: uppercase; font-weight: bold;
+      letter-spacing: 0.4px; white-space: nowrap;
+    }
+    .badge-red { background: #fde8e8; color: var(--red); }
+    .badge-green { background: #e8f5ed; color: var(--green); }
+    .badge-gold { background: #f7eedc; color: #8a681e; }
+    .badge-blue { background: #e7effa; color: var(--blue); }
+    .promo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .promo-card {
+      background: var(--white); border: 1px solid #dfdfdf; border-radius: 12px;
+      padding: 20px; position: relative; overflow: hidden;
+    }
+    .promo-card.active-promo { border-left: 6px solid var(--red); }
+    .promo-card.upcoming-promo { border-left: 6px solid var(--gold); }
+    .promo-card.ended-promo { border-left: 6px solid #bbbbbb; opacity: 0.85; }
+    .promo-head {
+      display: flex; justify-content: space-between; gap: 15px; align-items: flex-start;
+    }
+    .promo-card h3 { margin: 10px 0 0; color: #222; }
+    .promo-discount { color: var(--red); font-weight: bold; font-size: 20px; }
+    .promo-description { color: var(--muted); line-height: 1.5; margin: 15px 0; white-space: pre-line; }
+    .promo-details {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;
+    }
+    .detail-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .detail-value { font-weight: bold; }
+    .promo-buttons { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .pipeline-row {
+      display: grid; grid-template-columns: 95px 1fr auto; gap: 14px;
+      align-items: center; border-bottom: 1px solid #eeeeee; padding: 14px 0;
+    }
+    .pipeline-row:last-child { border-bottom: 0; }
+    .pipeline-date { font-weight: bold; color: var(--red); }
+    .pipeline-sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: #f7f7f7; color: #444; padding: 12px; text-align: left;
+      border-bottom: 2px solid #dddddd; font-size: 13px;
+    }
+    td { padding: 12px; border-bottom: 1px solid #eeeeee; font-size: 14px; }
+    tr:last-child td { border-bottom: 0; }
+    .ecwid-highlight { background: var(--cream); border-color: #e6dac0; }
+    .large-value { font-size: 33px; font-weight: bold; margin-top: 5px; }
+    .order-status-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      text-align: center; gap: 10px; margin-top: 15px;
+    }
+    .order-status-grid > div { border-right: 1px solid #e4e4e4; }
+    .order-status-grid > div:last-child { border-right: 0; }
+    .order-status-number { font-size: 23px; font-weight: bold; margin-top: 5px; }
+    .campaign-item {
+      border: 1px solid #e4e4e4; border-radius: 9px; padding: 14px; margin-bottom: 10px;
+    }
+    .campaign-title {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 15px; margin-bottom: 5px;
+    }
+    .campaign-meta { color: var(--muted); font-size: 13px; }
+    .calendar-item {
+      display: grid; grid-template-columns: 80px 1fr; gap: 15px;
+      margin-bottom: 18px; align-items: flex-start;
+    }
+    .calendar-date { font-weight: bold; color: var(--red); }
+    .footer { color: var(--muted); font-size: 12px; text-align: center; margin: 30px 0 10px; }
+    .empty-note { color: var(--muted); padding: 15px 0; }
+    .error-banner {
+      background: #fde8e8; border: 1px solid #f5b5b5; color: var(--dark-red);
+      padding: 12px 15px; border-radius: 9px; margin-bottom: 15px; font-size: 14px;
+      display: none;
+    }
+    .mock-banner {
+      background: #f7eedc; border: 1px solid #e0cfa5; color: #8a681e;
+      padding: 10px 15px; border-radius: 9px; margin-bottom: 15px; font-size: 13px;
+      display: none;
+    }
+    .chart-wrap { width: 100%; overflow-x: auto; }
+    .social-card { border-left: 6px solid var(--gold); }
+    .social-post {
+      background: var(--cream); border: 1px solid #e6dac0; border-radius: 9px;
+      padding: 12px; font-size: 14px; line-height: 1.5; margin-top: 12px;
+    }
+    .social-post .detail-label { margin-bottom: 6px; }
+    .chip { display: inline-block; background: #f0f0f0; border-radius: 12px;
+      padding: 3px 10px; font-size: 12px; margin-right: 5px; color: #555; }
+    .spin {
+      display: inline-block; width: 16px; height: 16px; vertical-align: -3px;
+      border: 2px solid #eee; border-top-color: var(--red); border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 1050px) {
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+      .three-column { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 800px) {
+      .dashboard { padding: 12px; }
+      .top-header { align-items: flex-start; flex-direction: column; }
+      .two-column, .promo-grid { grid-template-columns: 1fr; }
+      .order-status-grid { grid-template-columns: repeat(2, 1fr); }
+      .order-status-grid > div {
+        border: 0; padding: 10px; background: #f7f7f7; border-radius: 8px;
+      }
+    }
+    @media (max-width: 550px) {
+      .metric-grid { grid-template-columns: 1fr; }
+      .pipeline-row { grid-template-columns: 75px 1fr; }
+      .pipeline-row .badge { grid-column: 2; justify-self: start; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="dashboard">
+    <!-- HEADER -->
+    <header class="top-header">
+      <div>
+        <div class="brand-small">Schmidt's Sausage Haus</div>
+        <h1>2026 Marketing Hot Sheet</h1>
+        <p class="subtitle" id="subtitle">Executive marketing dashboard</p>
+      </div>
+      <div class="header-controls">
+        <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
+      </div>
+    </header>
+
+    <div class="mock-banner" id="mockBanner">
+      Sample data mode (MOCK_MODE=true) — connect your live keys in the environment variables to see real numbers.
+    </div>
+    <div class="error-banner" id="errorBanner"></div>
+
+    <!-- NAVIGATION — Promotions second, Social Media + Review added -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="promotions">Promotions</button>
+      <button class="tab" data-tab="ecommerce">Ecommerce</button>
+      <button class="tab" data-tab="digital">Digital Marketing</button>
+      <button class="tab" data-tab="calendar">Campaign Calendar</button>
+      <button class="tab" data-tab="social">Social Media</button>
+      <button class="tab" data-tab="review">Review<span class="count" id="reviewCount" style="display:none;">0</span></button>
+    </nav>
+
+    <!-- ================================================= -->
+    <!-- OVERVIEW -->
+    <!-- ================================================= -->
+    <section id="overview" class="panel active">
+      <div class="section-header">
+        <h2>KPI Dashboard</h2>
+        <div class="section-note">This week compared with last week</div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Website Sessions</div>
+          <div class="metric-value" id="kpiSessions">—</div>
+          <div class="metric-change neutral" id="kpiSessionsChange">vs. last week —</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">E-Commerce Orders</div>
+          <div class="metric-value" id="kpiOrders">—</div>
+          <div class="metric-change neutral" id="kpiOrdersChange">vs. last week —</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Conversion Rate</div>
+          <div class="metric-value" id="kpiConversion">—</div>
+          <div class="metric-change neutral" id="kpiConversionChange">orders ÷ sessions</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Average Order Value</div>
+          <div class="metric-value" id="kpiAov">—</div>
+          <div class="metric-change neutral" id="kpiAovChange">vs. last week —</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Ecommerce Revenue</div>
+          <div class="metric-value" id="kpiRevenue">—</div>
+          <div class="metric-change neutral" id="kpiRevenueChange">vs. last week —</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Active Promotions</div>
+          <div class="metric-value" id="kpiActivePromos">—</div>
+          <div class="metric-change neutral" id="kpiActivePromosNote">from Smart 1 Suite</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Abandoned Cart Value</div>
+          <div class="metric-value" id="kpiAbandoned">—</div>
+          <div class="metric-change neutral" id="kpiAbandonedNote">this week</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Website Users</div>
+          <div class="metric-value" id="kpiUsers">—</div>
+          <div class="metric-change neutral" id="kpiUsersChange">vs. last week —</div>
+        </div>
+      </div>
+      <div class="two-column">
+        <div class="card">
+          <h3>Website Highlights</h3>
+          <div class="highlight-row">
+            <span>Top Page</span>
+            <strong id="hlTopPage">—</strong>
+          </div>
+          <div class="highlight-row">
+            <span>Best Seller</span>
+            <strong id="hlBestSeller">—</strong>
+          </div>
+          <div class="highlight-row">
+            <span>Highest Traffic Source</span>
+            <strong id="hlTopChannel">—</strong>
+          </div>
+          <div class="highlight-row">
+            <span>Cart Abandonment</span>
+            <strong id="hlAbandon">—</strong>
+          </div>
+        </div>
+        <!-- Was "What Needs Attention" — now a Current Promotions quick summary.
+             Needs-attention items live in the Review tab. -->
+        <div class="card">
+          <h3>Current Promotions</h3>
+          <div id="overviewPromos"><div class="empty-note">Loading promotions…</div></div>
+          <div class="promo-buttons">
+            <button class="btn" data-goto="promotions">View All Promotions</button>
+            <button class="btn" data-goto="review">Open Review</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- PROMOTIONS (second tab) -->
+    <!-- ================================================= -->
+    <section id="promotions" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Current Promotions</h2>
+          <div class="section-note">Active offers, upcoming promotions and campaign status — live from Smart 1 Suite (GoHighLevel)</div>
+        </div>
+        <div>
+          <button class="btn" id="toggleEndedBtn">Show Recently Ended</button>
+        </div>
+      </div>
+      <div class="promo-grid" id="promoGrid">
+        <div class="empty-note">Loading promotions…</div>
+      </div>
+      <!-- PROMOTION PIPELINE -->
+      <div class="card" style="margin-top:18px;">
+        <div class="section-header">
+          <h3 style="margin:0;">Promotion Pipeline</h3>
+          <div class="section-note">Next 30 days</div>
+        </div>
+        <div id="pipelineRows"><div class="empty-note">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- ECOMMERCE -->
+    <!-- ================================================= -->
+    <section id="ecommerce" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Ecommerce Dashboard</h2>
+          <div class="section-note">Ecwid performance summary</div>
+        </div>
+        <span class="badge badge-gold">Ecwid</span>
+      </div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Orders This Week</div>
+          <div class="metric-value" id="ecOrdersWeek">—</div>
+          <div class="metric-change neutral" id="ecOrdersWeekChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Revenue This Week</div>
+          <div class="metric-value" id="ecRevenueWeek">—</div>
+          <div class="metric-change neutral" id="ecRevenueWeekChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Orders This Month</div>
+          <div class="metric-value" id="ecOrdersMonth">—</div>
+          <div class="metric-change neutral" id="ecOrdersMonthChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Revenue This Month</div>
+          <div class="metric-value" id="ecRevenueMonth">—</div>
+          <div class="metric-change neutral" id="ecRevenueMonthChange"></div>
+        </div>
+      </div>
+      <div class="two-column">
+        <div class="card ecwid-highlight">
+          <div class="metric-label">Abandoned Cart Value (This Week)</div>
+          <div class="large-value" id="ecAbandonValue">—</div>
+          <p id="ecAbandonNote">Total value of carts left behind this week.</p>
+        </div>
+        <div class="card">
+          <h3>Order Status This Week</h3>
+          <div class="order-status-grid">
+            <div>
+              <div class="metric-label">Pending</div>
+              <div class="order-status-number" id="stPending">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Processing</div>
+              <div class="order-status-number" id="stProcessing">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Shipped</div>
+              <div class="order-status-number" id="stShipped">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Delivered</div>
+              <div class="order-status-number" id="stDelivered">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Top Products This Week</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Units</th>
+                <th>Revenue</th>
+                <th>Avg. Order Value</th>
+              </tr>
+            </thead>
+            <tbody id="topProductsBody">
+              <tr><td colspan="4" class="empty-note">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-header">
+          <h3 style="margin:0;">12-Month Revenue</h3>
+          <div class="section-note" id="chartNote"></div>
+        </div>
+        <div class="chart-wrap" id="salesChart"></div>
+      </div>
+      <div class="card">
+        <h3>Discount Usage</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Orders</th>
+                <th>With Discounts</th>
+                <th>Discount $</th>
+                <th>% of Orders</th>
+              </tr>
+            </thead>
+            <tbody id="discountBody">
+              <tr><td colspan="5" class="empty-note">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- DIGITAL MARKETING -->
+    <!-- ================================================= -->
+    <section id="digital" class="panel">
+      <div class="section-header">
+        <h2>Digital Marketing Performance</h2>
+        <div class="section-note">Website analytics, email and paid media</div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Sessions This Week</div>
+          <div class="metric-value" id="dmSessions">—</div>
+          <div class="metric-change neutral" id="dmSessionsChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Active Users</div>
+          <div class="metric-value" id="dmUsers">—</div>
+          <div class="metric-change neutral" id="dmUsersChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Page Views</div>
+          <div class="metric-value" id="dmViews">—</div>
+          <div class="metric-change neutral" id="dmViewsChange"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Conversion Rate</div>
+          <div class="metric-value" id="dmConversion">—</div>
+          <div class="metric-change neutral">orders ÷ sessions</div>
+        </div>
+      </div>
+      <div class="two-column">
+        <div class="card">
+          <h3>Top Pages This Week</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Page</th><th>Views</th></tr></thead>
+              <tbody id="topPagesBody">
+                <tr><td colspan="2" class="empty-note">Connect Google Analytics to populate.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Traffic Sources This Week</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Channel</th><th>Sessions</th></tr></thead>
+              <tbody id="topChannelsBody">
+                <tr><td colspan="2" class="empty-note">Connect Google Analytics to populate.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="two-column">
+        <div class="card">
+          <h3>Email Marketing Results</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Campaign</th><th>Open Rate</th><th>CTR</th></tr></thead>
+              <tbody>
+                <tr><td colspan="3" class="empty-note">Email stats coming soon — will pull from Smart 1 Suite campaigns.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Paid Advertising</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Platform</th><th>Spend</th><th>Revenue</th><th>ROAS</th></tr></thead>
+              <tbody>
+                <tr><td>Facebook</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr><td>Instagram</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr><td>TikTok</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr><td>Google</td><td>—</td><td>—</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- CAMPAIGN CALENDAR -->
+    <!-- ================================================= -->
+    <section id="calendar" class="panel">
+      <div class="section-header">
+        <h2>Campaign Calendar</h2>
+        <div class="section-note">Live promotions plus upcoming holiday opportunities</div>
+      </div>
+      <div class="two-column">
+        <div class="card">
+          <h3>Live &amp; This Week</h3>
+          <div id="calendarThisWeek"><div class="empty-note">Loading…</div></div>
+        </div>
+        <div class="card">
+          <h3>Next 60 Days</h3>
+          <div id="calendarUpcoming"><div class="empty-note">Loading…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- SOCIAL MEDIA (AI holiday planner) -->
+    <!-- ================================================= -->
+    <section id="social" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Social Media Planner</h2>
+          <div class="section-note">
+            AI-suggested social media holidays for the next 60 days, tied to
+            schmidthaus.com — restaurant, catering and food trucks
+          </div>
+        </div>
+        <button class="btn btn-primary" id="socialRefreshBtn">Get Fresh Ideas</button>
+      </div>
+      <div id="socialGrid" class="promo-grid">
+        <div class="empty-note">Loading suggestions…</div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- REVIEW (was the "What Needs Attention" section) -->
+    <!-- ================================================= -->
+    <section id="review" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Review</h2>
+          <div class="section-note">Everything that needs a decision or a closer look this week</div>
+        </div>
+      </div>
+      <div class="card">
+        <div id="reviewItems"><div class="empty-note">Loading…</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      Schmidt's Marketing Hot Sheet • Internal Marketing Dashboard •
+      <span id="lastUpdated"></span>
+    </div>
+  </main>
+
+  <script>
+    // ------------------------------------------------ tab handling
+    const tabs = document.querySelectorAll(".tab");
+    const panels = document.querySelectorAll(".panel");
+    function showTab(target) {
+      tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === target));
+      panels.forEach((p) => p.classList.toggle("active", p.id === target));
+    }
+    tabs.forEach((tab) =>
+      tab.addEventListener("click", () => showTab(tab.dataset.tab))
+    );
+    document.querySelectorAll("[data-goto]").forEach((btn) =>
+      btn.addEventListener("click", () => showTab(btn.dataset.goto))
+    );
+
+    // ------------------------------------------------ helpers
+    const $ = (id) => document.getElementById(id);
+    const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (m) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
+    const money = (n) => "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const money2 = (n) => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const num = (n) => Number(n || 0).toLocaleString("en-US");
+    function changeText(el, curr, prev, label) {
+      label = label || "vs. last week";
+      if (!prev) { el.textContent = label + " —"; el.className = "metric-change neutral"; return; }
+      const p = ((curr - prev) / prev) * 100;
+      const arrow = p >= 0 ? "▲" : "▼";
+      el.textContent = `${arrow} ${Math.abs(p).toFixed(1)}% ${label}`;
+      el.className = "metric-change " + (p >= 0 ? "up" : "down");
+    }
+    function badgeFor(status) {
+      return status === "active" ? '<span class="badge badge-green">Active</span>'
+        : status === "upcoming" ? '<span class="badge badge-gold">Upcoming</span>'
+        : '<span class="badge badge-red">Ended</span>';
+    }
+    const fmtDay = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+    let showEnded = false;
+    let DATA = null;
+
+    // ------------------------------------------------ renderers
+    function renderOverview(d) {
+      const ec = d.ecwid && !d.ecwid.error ? d.ecwid : null;
+      const ga = d.analytics && !d.analytics.error ? d.analytics : null;
+      const promos = d.promotions && !d.promotions.error ? d.promotions.promotions || [] : [];
+
+      if (ga) {
+        $("kpiSessions").textContent = num(ga.thisWeek.sessions);
+        changeText($("kpiSessionsChange"), ga.thisWeek.sessions, ga.lastWeek.sessions);
+        $("kpiUsers").textContent = num(ga.thisWeek.users);
+        changeText($("kpiUsersChange"), ga.thisWeek.users, ga.lastWeek.users);
+        $("hlTopPage").textContent = ga.topPages?.[0]?.page || "—";
+        $("hlTopChannel").textContent = ga.topChannels?.[0]?.channel || "—";
+      }
+      if (ec) {
+        $("kpiOrders").textContent = num(ec.thisWeek.totalOrders);
+        changeText($("kpiOrdersChange"), ec.thisWeek.totalOrders, ec.lastWeek.totalOrders);
+        $("kpiRevenue").textContent = money(ec.thisWeek.totalRevenue);
+        changeText($("kpiRevenueChange"), ec.thisWeek.totalRevenue, ec.lastWeek.totalRevenue);
+        const aov = ec.thisWeek.totalOrders ? ec.thisWeek.totalRevenue / ec.thisWeek.totalOrders : 0;
+        const aovLast = ec.lastWeek.totalOrders ? ec.lastWeek.totalRevenue / ec.lastWeek.totalOrders : 0;
+        $("kpiAov").textContent = money2(aov);
+        changeText($("kpiAovChange"), aov, aovLast);
+        $("kpiAbandoned").textContent = money(ec.thisWeek.abandonedCartValue);
+        $("kpiAbandonedNote").textContent = `${ec.thisWeek.abandonedCarts} cart(s) this week`;
+        $("hlBestSeller").textContent = ec.topProductsWeek?.[0]?.name || "—";
+        $("hlAbandon").textContent = money(ec.thisWeek.abandonedCartValue);
+      }
+      if (ga && ec) {
+        const cr = ga.thisWeek.sessions ? (ec.thisWeek.totalOrders / ga.thisWeek.sessions) * 100 : 0;
+        const crLast = ga.lastWeek.sessions ? (ec.lastWeek.totalOrders / ga.lastWeek.sessions) * 100 : 0;
+        $("kpiConversion").textContent = cr.toFixed(2) + "%";
+        changeText($("kpiConversionChange"), cr, crLast);
+      }
+
+      const active = promos.filter((p) => p.status === "active");
+      const upcoming = promos.filter((p) => p.status === "upcoming");
+      $("kpiActivePromos").textContent = active.length;
+      $("kpiActivePromosNote").textContent =
+        upcoming.length ? `${upcoming.length} upcoming` : "from Smart 1 Suite";
+
+      // Current Promotions quick summary (replaces What Needs Attention)
+      const box = $("overviewPromos");
+      if (d.promotions?.error) {
+        box.innerHTML = `<div class="empty-note">Couldn't load promotions: ${esc(d.promotions.error)}</div>`;
+      } else if (!active.length && !upcoming.length) {
+        box.innerHTML = '<div class="empty-note">No active or upcoming promotions right now — check the Social Media tab for holiday tie-in ideas.</div>';
+      } else {
+        box.innerHTML = [...active, ...upcoming].slice(0, 4).map((p) => `
+          <div class="alert-box">
+            ${badgeFor(p.status)}
+            <div>
+              <strong>${esc(p.name)}</strong>
+              <div class="campaign-meta">
+                ${p.status === "active"
+                  ? `Ends ${esc(p.end || "TBD")}${p.daysLeft !== null ? ` • ${p.daysLeft} day${p.daysLeft === 1 ? "" : "s"} left` : ""}`
+                  : `Starts ${esc(p.start || "TBD")}`}
+                ${p.audience ? " • " + esc(p.audience) : ""}
+              </div>
+            </div>
+          </div>`).join("");
+      }
+    }
+
+    function promoCard(p) {
+      const cls = p.status === "active" ? "active-promo" : p.status === "upcoming" ? "upcoming-promo" : "ended-promo";
+      return `
+        <article class="promo-card ${cls}">
+          <div class="promo-head">
+            <div>
+              ${badgeFor(p.status)}
+              <h3>${esc(p.name)}</h3>
+            </div>
+            ${p.promoCode ? `<div class="promo-discount">${esc(p.promoCode)}</div>` : ""}
+          </div>
+          ${p.details ? `<div class="promo-description">${esc(p.details)}</div>` : ""}
+          <div class="promo-details">
+            <div>
+              <div class="detail-label">Starts</div>
+              <div class="detail-value">${esc(p.start || "TBD")}</div>
+            </div>
+            <div>
+              <div class="detail-label">Ends</div>
+              <div class="detail-value">${esc(p.end || "TBD")}</div>
+            </div>
+            ${p.audience ? `
+            <div>
+              <div class="detail-label">This Promotion is for</div>
+              <div class="detail-value">${esc(p.audience)}</div>
+            </div>` : ""}
+            ${p.contact ? `
+            <div>
+              <div class="detail-label">Contact</div>
+              <div class="detail-value">${esc(p.contact)}</div>
+            </div>` : ""}
+          </div>
+        </article>`;
+    }
+
+    function renderPromotions(d) {
+      const grid = $("promoGrid");
+      const pipe = $("pipelineRows");
+      if (d.promotions?.error) {
+        grid.innerHTML = `<div class="empty-note">Couldn't load promotions: ${esc(d.promotions.error)}</div>`;
+        pipe.innerHTML = '<div class="empty-note">—</div>';
+        return;
+      }
+      const promos = d.promotions.promotions || [];
+      const visible = promos.filter((p) => showEnded || p.status !== "ended");
+      grid.innerHTML = visible.length
+        ? visible.map(promoCard).join("")
+        : '<div class="empty-note">No promotions to show.</div>';
+
+      // Pipeline: date-ordered promo starts/ends over next 30 days
+      const now = new Date();
+      const horizon = new Date(+now + 30 * 86400000);
+      const events = [];
+      promos.forEach((p) => {
+        if (p.startISO) {
+          const s = new Date(p.startISO);
+          if (s >= now && s <= horizon)
+            events.push({ date: s, label: `${p.name} launches`, sub: p.audience || "Promotion", badge: "badge-gold", badgeText: "Prep" });
+        }
+        if (p.endISO) {
+          const e = new Date(p.endISO);
+          if (e >= now && e <= horizon)
+            events.push({ date: e, label: `${p.name} ends`, sub: p.audience || "Promotion", badge: p.status === "active" ? "badge-green" : "badge-blue", badgeText: p.status === "active" ? "Live" : "Plan" });
+        }
+      });
+      // add nearest AI holidays as planning opportunities
+      (DATA?.social?.suggestions || []).slice(0, 3).forEach((s) => {
+        const dt = new Date(s.date + "T12:00:00");
+        if (dt >= now && dt <= horizon)
+          events.push({ date: dt, label: s.holiday, sub: "Holiday opportunity", badge: "badge-blue", badgeText: "Plan" });
+      });
+      events.sort((a, b) => a.date - b.date);
+      pipe.innerHTML = events.length
+        ? events.map((e) => `
+          <div class="pipeline-row">
+            <div class="pipeline-date">${fmtDay(e.date)}</div>
+            <div>
+              <strong>${esc(e.label)}</strong>
+              <div class="pipeline-sub">${esc(e.sub)}</div>
+            </div>
+            <span class="badge ${e.badge}">${e.badgeText}</span>
+          </div>`).join("")
+        : '<div class="empty-note">Nothing scheduled in the next 30 days.</div>';
+    }
+
+    function renderEcommerce(d) {
+      if (d.ecwid?.error) {
+        $("topProductsBody").innerHTML = `<tr><td colspan="4" class="empty-note">Couldn't load Ecwid data: ${esc(d.ecwid.error)}</td></tr>`;
+        return;
+      }
+      const ec = d.ecwid;
+      $("ecOrdersWeek").textContent = num(ec.thisWeek.totalOrders);
+      changeText($("ecOrdersWeekChange"), ec.thisWeek.totalOrders, ec.lastWeek.totalOrders);
+      $("ecRevenueWeek").textContent = money(ec.thisWeek.totalRevenue);
+      changeText($("ecRevenueWeekChange"), ec.thisWeek.totalRevenue, ec.lastWeek.totalRevenue);
+      $("ecOrdersMonth").textContent = num(ec.thisMonth.totalOrders);
+      changeText($("ecOrdersMonthChange"), ec.thisMonth.totalOrders, ec.lastMonth.totalOrders, "vs. last month");
+      $("ecRevenueMonth").textContent = money(ec.thisMonth.totalRevenue);
+      changeText($("ecRevenueMonthChange"), ec.thisMonth.totalRevenue, ec.lastMonth.totalRevenue, "vs. last month");
+      $("ecAbandonValue").textContent = money(ec.thisWeek.abandonedCartValue);
+      $("ecAbandonNote").textContent = `${ec.thisWeek.abandonedCarts} abandoned cart(s) this week • ${ec.thisMonth.abandonedCarts} this month (${money(ec.thisMonth.abandonedCartValue)})`;
+      $("stPending").textContent = ec.thisWeek.orderStatus.pending;
+      $("stProcessing").textContent = ec.thisWeek.orderStatus.processing;
+      $("stShipped").textContent = ec.thisWeek.orderStatus.shipped;
+      $("stDelivered").textContent = ec.thisWeek.orderStatus.delivered;
+
+      $("topProductsBody").innerHTML = (ec.topProductsWeek || []).length
+        ? ec.topProductsWeek.map((p) => `
+          <tr>
+            <td>${esc(p.name)}</td>
+            <td>${num(p.quantity)}</td>
+            <td>${money2(p.revenue)}</td>
+            <td>${money2(p.quantity ? p.revenue / p.quantity : 0)}</td>
+          </tr>`).join("")
+        : '<tr><td colspan="4" class="empty-note">No product sales yet this week.</td></tr>';
+
+      $("discountBody").innerHTML = ["week", "month", "year"].map((k) => {
+        const m = ec.discountMetrics[k];
+        const label = { week: "This Week", month: "This Month", year: "This Year" }[k];
+        return `<tr>
+          <td>${label}</td>
+          <td>${num(m.totalOrders)}</td>
+          <td>${num(m.ordersWithDiscounts)}</td>
+          <td>${money2(m.totalDiscountAmount)}</td>
+          <td>${m.discountPercentage}%</td>
+        </tr>`;
+      }).join("");
+
+      renderSalesChart(ec.monthlySales || []);
+    }
+
+    // Simple inline-SVG bar chart in brand colors
+    function renderSalesChart(series) {
+      const wrap = $("salesChart");
+      if (!series.length) { wrap.innerHTML = '<div class="empty-note">No sales history.</div>'; return; }
+      const W = 1100, H = 260, padL = 60, padB = 40, padT = 16;
+      const max = Math.max(...series.map((s) => s.revenue), 1);
+      const bw = (W - padL - 20) / series.length;
+      const bars = series.map((s, i) => {
+        const h = ((H - padB - padT) * s.revenue) / max;
+        const x = padL + i * bw + bw * 0.15;
+        const y = H - padB - h;
+        const isCurrent = i === series.length - 1;
+        return `
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${h.toFixed(1)}"
+            rx="3" fill="${isCurrent ? "#b38a3d" : "#9f1d20"}">
+            <title>${s.month}: ${money(s.revenue)} (${s.orders} orders)</title>
+          </rect>
+          <text x="${(x + bw * 0.35).toFixed(1)}" y="${H - padB + 16}" font-size="11"
+            text-anchor="middle" fill="#747474">${s.month}</text>`;
+      }).join("");
+      const gridLines = [0.25, 0.5, 0.75, 1].map((f) => {
+        const y = H - padB - (H - padB - padT) * f;
+        return `<line x1="${padL}" y1="${y}" x2="${W - 10}" y2="${y}" stroke="#eeeeee"/>
+          <text x="${padL - 8}" y="${y + 4}" font-size="11" text-anchor="end" fill="#747474">${money(max * f)}</text>`;
+      }).join("");
+      $("chartNote").textContent = "Gold bar = current month (partial)";
+      wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly revenue for the last 12 months"
+        style="width:100%;min-width:700px;height:auto;">${gridLines}${bars}</svg>`;
+    }
+
+    function renderDigital(d) {
+      const ga = d.analytics && !d.analytics.error ? d.analytics : null;
+      if (!ga) {
+        const msg = d.analytics?.error ? esc(d.analytics.error) : "Connect Google Analytics to populate.";
+        $("topPagesBody").innerHTML = `<tr><td colspan="2" class="empty-note">${msg}</td></tr>`;
+        $("topChannelsBody").innerHTML = `<tr><td colspan="2" class="empty-note">${msg}</td></tr>`;
+        return;
+      }
+      $("dmSessions").textContent = num(ga.thisWeek.sessions);
+      changeText($("dmSessionsChange"), ga.thisWeek.sessions, ga.lastWeek.sessions);
+      $("dmUsers").textContent = num(ga.thisWeek.users);
+      changeText($("dmUsersChange"), ga.thisWeek.users, ga.lastWeek.users);
+      $("dmViews").textContent = num(ga.thisWeek.pageViews);
+      changeText($("dmViewsChange"), ga.thisWeek.pageViews, ga.lastWeek.pageViews);
+      const ec = d.ecwid && !d.ecwid.error ? d.ecwid : null;
+      if (ec && ga.thisWeek.sessions) {
+        $("dmConversion").textContent = ((ec.thisWeek.totalOrders / ga.thisWeek.sessions) * 100).toFixed(2) + "%";
+      }
+      $("topPagesBody").innerHTML = (ga.topPages || []).map((p) =>
+        `<tr><td>${esc(p.page)}</td><td>${num(p.views)}</td></tr>`).join("") ||
+        '<tr><td colspan="2" class="empty-note">No data yet.</td></tr>';
+      $("topChannelsBody").innerHTML = (ga.topChannels || []).map((c) =>
+        `<tr><td>${esc(c.channel)}</td><td>${num(c.sessions)}</td></tr>`).join("") ||
+        '<tr><td colspan="2" class="empty-note">No data yet.</td></tr>';
+    }
+
+    function renderCalendar(d) {
+      const promos = d.promotions && !d.promotions.error ? d.promotions.promotions || [] : [];
+      const social = d.social?.suggestions || [];
+      const active = promos.filter((p) => p.status === "active");
+      $("calendarThisWeek").innerHTML = active.length
+        ? active.map((p) => `
+          <div class="campaign-item">
+            <div class="campaign-title">
+              <strong>${esc(p.name)}</strong>
+              <span class="badge badge-green">Live</span>
+            </div>
+            <div class="campaign-meta">${esc(p.audience || "Promotion")} • Ends ${esc(p.end || "TBD")}</div>
+          </div>`).join("")
+        : '<div class="empty-note">No live campaigns this week.</div>';
+
+      const upcoming = [];
+      promos.filter((p) => p.status === "upcoming" && p.startISO).forEach((p) =>
+        upcoming.push({ date: new Date(p.startISO), title: p.name, meta: (p.audience || "Promotion") + " • Launch" }));
+      social.forEach((s) => {
+        const dt = new Date(s.date + "T12:00:00");
+        if (!isNaN(dt)) upcoming.push({ date: dt, title: s.holiday, meta: "Holiday opportunity • " + (s.businessLines || []).join(", ") });
+      });
+      upcoming.sort((a, b) => a.date - b.date);
+      $("calendarUpcoming").innerHTML = upcoming.length
+        ? upcoming.slice(0, 10).map((u) => `
+          <div class="calendar-item">
+            <div class="calendar-date">${fmtDay(u.date)}</div>
+            <div>
+              <strong>${esc(u.title)}</strong>
+              <div class="campaign-meta">${esc(u.meta)}</div>
+            </div>
+          </div>`).join("")
+        : '<div class="empty-note">Nothing scheduled yet.</div>';
+    }
+
+    function renderSocial(d) {
+      const grid = $("socialGrid");
+      if (d.social?.error) {
+        grid.innerHTML = `<div class="empty-note">Couldn't load suggestions: ${esc(d.social.error)}</div>`;
+        return;
+      }
+      const list = d.social?.suggestions || [];
+      const lineLabel = { restaurant: "Restaurant", catering: "Catering", foodtrucks: "Food Trucks" };
+      grid.innerHTML = list.length
+        ? list.map((s) => `
+          <article class="promo-card social-card">
+            <div class="promo-head">
+              <div>
+                <span class="badge badge-gold">${esc(fmtDay(s.date + "T12:00:00"))}</span>
+                <h3>${esc(s.holiday)}</h3>
+              </div>
+            </div>
+            <div class="promo-description">${esc(s.why)}</div>
+            <div>${(s.businessLines || []).map((b) => `<span class="chip">${esc(lineLabel[b] || b)}</span>`).join("")}</div>
+            <div class="promo-details">
+              <div style="grid-column: 1 / -1;">
+                <div class="detail-label">Promotion Idea</div>
+                <div class="detail-value" style="font-weight:normal;">${esc(s.promoIdea)}</div>
+              </div>
+            </div>
+            <div class="social-post">
+              <div class="detail-label">Ready-to-Use Post</div>
+              ${esc(s.samplePost)}
+            </div>
+            <div class="promo-buttons">
+              <button class="btn" onclick="navigator.clipboard.writeText(this.closest('article').querySelector('.social-post').innerText.replace('Ready-to-Use Post','').trim()).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy Post',1500);})">Copy Post</button>
+            </div>
+          </article>`).join("")
+        : '<div class="empty-note">No suggestions yet — click "Get Fresh Ideas".</div>';
+    }
+
+    function renderReview(d) {
+      const box = $("reviewItems");
+      const items = d.review?.items || [];
+      const count = $("reviewCount");
+      count.style.display = items.length ? "inline-block" : "none";
+      count.textContent = items.length;
+      const map = {
+        review: { badge: "badge-red", text: "Review" },
+        watch: { badge: "badge-gold", text: "Watch" },
+        action: { badge: "badge-blue", text: "Action" },
+      };
+      box.innerHTML = items.length
+        ? items.map((it) => `
+          <div class="alert-box">
+            <span class="badge ${map[it.severity].badge}">${map[it.severity].text}</span>
+            <div>
+              <strong>${esc(it.title)}</strong>
+              <div class="campaign-meta">${esc(it.detail)}</div>
+            </div>
+          </div>`).join("")
+        : '<div class="empty-note">Nothing needs attention right now. 🎉</div>';
+    }
+
+    // ------------------------------------------------ load
+    function weekSubtitle() {
+      const now = new Date();
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      const f = (d) => d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      return `Executive marketing dashboard • Week of ${f(start)}–${end.getDate()}, ${end.getFullYear()}`;
+    }
+
+    async function load() {
+      const btn = $("refreshBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span>Loading…';
+      $("errorBanner").style.display = "none";
+      try {
+        const resp = await fetch("/api/all");
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        DATA = await resp.json();
+        $("mockBanner").style.display = DATA.mock ? "block" : "none";
+        renderOverview(DATA);
+        renderPromotions(DATA);
+        renderEcommerce(DATA);
+        renderDigital(DATA);
+        renderCalendar(DATA);
+        renderSocial(DATA);
+        renderReview(DATA);
+        $("lastUpdated").textContent =
+          "Updated " + new Date(DATA.generatedAt).toLocaleString("en-US");
+      } catch (err) {
+        console.error(err);
+        const banner = $("errorBanner");
+        banner.textContent = "Couldn't load dashboard data: " + err.message +
+          ". Check that the server is running and environment variables are set.";
+        banner.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Refresh Data";
+      }
+    }
+
+    $("subtitle").textContent = weekSubtitle();
+    $("refreshBtn").addEventListener("click", load);
+    $("toggleEndedBtn").addEventListener("click", () => {
+      showEnded = !showEnded;
+      $("toggleEndedBtn").textContent = showEnded ? "Hide Recently Ended" : "Show Recently Ended";
+      if (DATA) renderPromotions(DATA);
+    });
+    $("socialRefreshBtn").addEventListener("click", async () => {
+      const btn = $("socialRefreshBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span>Thinking…';
+      try {
+        const resp = await fetch("/api/social?refresh=1");
+        const social = await resp.json();
+        if (DATA) { DATA.social = social; renderSocial(DATA); renderCalendar(DATA); renderPromotions(DATA); }
+      } catch (e) { console.error(e); }
+      btn.disabled = false;
+      btn.textContent = "Get Fresh Ideas";
+    });
+
+    load();
+    setInterval(load, 5 * 60 * 1000); // auto-refresh every 5 minutes
+  </script>
+</body>
+</html>
