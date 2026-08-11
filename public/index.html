@@ -201,6 +201,27 @@
       animation: spin 0.8s linear infinite; margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .period-toggle { display: inline-flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .period-btn { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
+    .period-btn:last-child { border-right: 0; }
+    .period-btn.active { background: var(--red); color: var(--white); }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      z-index: 100; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--white); border-radius: 14px; border-top: 5px solid var(--red);
+      width: 100%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 20px; border-bottom: 1px solid #eee;
+    }
+    .modal-head h3 { margin: 0; color: var(--red); }
+    .modal-body { flex: 1; overflow: hidden; }
+    .modal-body iframe { width: 100%; height: 70vh; border: 0; display: block; }
     @media (max-width: 1050px) {
       .metric-grid { grid-template-columns: repeat(2, 1fr); }
       .three-column { grid-template-columns: 1fr; }
@@ -232,6 +253,11 @@
         <p class="subtitle" id="subtitle">Executive marketing dashboard</p>
       </div>
       <div class="header-controls">
+        <div class="period-toggle" role="group" aria-label="Stats period">
+          <button class="btn period-btn active" data-period="p7">Last 7 Days</button>
+          <button class="btn period-btn" data-period="mtd">Month to Date</button>
+          <button class="btn period-btn" data-period="ytd">This Year</button>
+        </div>
         <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
       </div>
     </header>
@@ -258,7 +284,7 @@
     <section id="overview" class="panel active">
       <div class="section-header">
         <h2>KPI Dashboard</h2>
-        <div class="section-note">This week compared with last week</div>
+        <div class="section-note period-note">Last 7 days compared with the prior 7 days</div>
       </div>
       <div class="metric-grid">
         <div class="metric-card">
@@ -346,6 +372,7 @@
         </div>
         <div>
           <button class="btn" id="toggleEndedBtn">Show Recently Ended</button>
+          <button class="btn btn-primary" id="newPromoBtn">+ Submit a New Promotion</button>
         </div>
       </div>
       <div class="promo-grid" id="promoGrid">
@@ -374,34 +401,34 @@
       </div>
       <div class="metric-grid">
         <div class="metric-card">
-          <div class="metric-label">Orders This Week</div>
-          <div class="metric-value" id="ecOrdersWeek">—</div>
-          <div class="metric-change neutral" id="ecOrdersWeekChange"></div>
+          <div class="metric-label">Orders</div>
+          <div class="metric-value" id="ecOrders">—</div>
+          <div class="metric-change neutral" id="ecOrdersChange"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Revenue This Week</div>
-          <div class="metric-value" id="ecRevenueWeek">—</div>
-          <div class="metric-change neutral" id="ecRevenueWeekChange"></div>
+          <div class="metric-label">Revenue</div>
+          <div class="metric-value" id="ecRevenue">—</div>
+          <div class="metric-change neutral" id="ecRevenueChange"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Orders This Month</div>
-          <div class="metric-value" id="ecOrdersMonth">—</div>
-          <div class="metric-change neutral" id="ecOrdersMonthChange"></div>
+          <div class="metric-label">Average Order Value</div>
+          <div class="metric-value" id="ecAov">—</div>
+          <div class="metric-change neutral" id="ecAovChange"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Revenue This Month</div>
-          <div class="metric-value" id="ecRevenueMonth">—</div>
-          <div class="metric-change neutral" id="ecRevenueMonthChange"></div>
+          <div class="metric-label">Cart Abandonment Rate</div>
+          <div class="metric-value" id="ecAbandonRate">—</div>
+          <div class="metric-change neutral" id="ecAbandonRateChange">from Google Analytics</div>
         </div>
       </div>
       <div class="two-column">
         <div class="card ecwid-highlight">
-          <div class="metric-label">Abandoned Cart Value (This Week)</div>
-          <div class="large-value" id="ecAbandonValue">—</div>
-          <p id="ecAbandonNote">Total value of carts left behind this week.</p>
+          <div class="metric-label">Cart Funnel (Google Analytics)</div>
+          <div class="large-value" id="ecFunnelRate">—</div>
+          <p id="ecFunnelNote">Add-to-carts vs completed purchases.</p>
         </div>
         <div class="card">
-          <h3>Order Status This Week</h3>
+          <h3>Order Status</h3>
           <div class="order-status-grid">
             <div>
               <div class="metric-label">Pending</div>
@@ -423,7 +450,7 @@
         </div>
       </div>
       <div class="card">
-        <h3>Top Products This Week</h3>
+        <h3>Top Products</h3>
         <div class="table-wrap">
           <table>
             <thead>
@@ -478,7 +505,7 @@
       </div>
       <div class="metric-grid">
         <div class="metric-card">
-          <div class="metric-label">Sessions This Week</div>
+          <div class="metric-label">Sessions</div>
           <div class="metric-value" id="dmSessions">—</div>
           <div class="metric-change neutral" id="dmSessionsChange"></div>
         </div>
@@ -500,7 +527,7 @@
       </div>
       <div class="two-column">
         <div class="card">
-          <h3>Top Pages This Week</h3>
+          <h3>Top Pages</h3>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Page</th><th>Views</th></tr></thead>
@@ -511,7 +538,7 @@
           </div>
         </div>
         <div class="card">
-          <h3>Traffic Sources This Week</h3>
+          <h3>Traffic Sources</h3>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Channel</th><th>Sessions</th></tr></thead>
@@ -535,7 +562,7 @@
           </div>
         </div>
         <div class="card">
-          <h3>Key Pages This Week</h3>
+          <h3>Key Pages</h3>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Page</th><th>Views</th><th>Users</th><th>vs Last Week</th></tr></thead>
@@ -608,6 +635,17 @@
     </div>
   </main>
 
+  <!-- Submit a New Promotion — embedded Smart 1 Suite form -->
+  <div class="modal-overlay" id="promoModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Submit a New Promotion</h3>
+        <button class="btn" id="promoModalClose">✕ Close</button>
+      </div>
+      <div class="modal-body" id="promoModalBody"><!-- iframe injected on open --></div>
+    </div>
+  </div>
+
   <script>
     // ------------------------------------------------ tab handling
     const tabs = document.querySelectorAll(".tab");
@@ -648,39 +686,58 @@
     let showEnded = false;
     let DATA = null;
 
+    // ------------------------------------------------ stats period toggle
+    let PERIOD = "p7";
+    const PERIOD_META = {
+      p7: { label: "Last 7 Days", vs: "vs. prior 7 days", note: "Last 7 days compared with the prior 7 days" },
+      mtd: { label: "Month to Date", vs: "vs. last month", note: "Month to date compared with the same days last month" },
+      ytd: { label: "This Year", vs: "vs. last year", note: "Year to date compared with the same period last year" },
+    };
+    // Pull a per-period slice whether or not the API payload has `periods`
+    const ecPeriod = (ec) => ec?.periods?.[PERIOD] || null;
+    const gaPeriod = (ga) => ga?.periods?.[PERIOD] || null;
+    const perList = (obj) => Array.isArray(obj) ? obj : (obj?.[PERIOD] || []);
+
     // ------------------------------------------------ renderers
     function renderOverview(d) {
       const ec = d.ecwid && !d.ecwid.error ? d.ecwid : null;
       const ga = d.analytics && !d.analytics.error ? d.analytics : null;
       const promos = d.promotions && !d.promotions.error ? d.promotions.promotions || [] : [];
 
+      const vs = PERIOD_META[PERIOD].vs;
+      const gp = gaPeriod(ga);
+      const ep = ecPeriod(ec);
+      if (gp) {
+        $("kpiSessions").textContent = num(gp.sessions);
+        changeText($("kpiSessionsChange"), gp.sessions, gp.prev.sessions, vs);
+        $("kpiUsers").textContent = num(gp.users);
+        changeText($("kpiUsersChange"), gp.users, gp.prev.users, vs);
+      }
       if (ga) {
-        $("kpiSessions").textContent = num(ga.thisWeek.sessions);
-        changeText($("kpiSessionsChange"), ga.thisWeek.sessions, ga.lastWeek.sessions);
-        $("kpiUsers").textContent = num(ga.thisWeek.users);
-        changeText($("kpiUsersChange"), ga.thisWeek.users, ga.lastWeek.users);
-        $("hlTopPage").textContent = ga.topPages?.[0]?.page || "—";
-        $("hlTopChannel").textContent = ga.topChannels?.[0]?.channel || "—";
+        $("hlTopPage").textContent = perList(ga.topPages)?.[0]?.page || "—";
+        $("hlTopChannel").textContent = perList(ga.topChannels)?.[0]?.channel || "—";
+      }
+      if (ep) {
+        $("kpiOrders").textContent = num(ep.totalOrders);
+        changeText($("kpiOrdersChange"), ep.totalOrders, ep.prev.totalOrders, vs);
+        $("kpiRevenue").textContent = money(ep.totalRevenue);
+        changeText($("kpiRevenueChange"), ep.totalRevenue, ep.prev.totalRevenue, vs);
+        const aov = ep.totalOrders ? ep.totalRevenue / ep.totalOrders : 0;
+        const aovPrev = ep.prev.totalOrders ? ep.prev.totalRevenue / ep.prev.totalOrders : 0;
+        $("kpiAov").textContent = money2(aov);
+        changeText($("kpiAovChange"), aov, aovPrev, vs);
+        $("hlBestSeller").textContent = ep.topProducts?.[0]?.name || "—";
       }
       if (ec) {
-        $("kpiOrders").textContent = num(ec.thisWeek.totalOrders);
-        changeText($("kpiOrdersChange"), ec.thisWeek.totalOrders, ec.lastWeek.totalOrders);
-        $("kpiRevenue").textContent = money(ec.thisWeek.totalRevenue);
-        changeText($("kpiRevenueChange"), ec.thisWeek.totalRevenue, ec.lastWeek.totalRevenue);
-        const aov = ec.thisWeek.totalOrders ? ec.thisWeek.totalRevenue / ec.thisWeek.totalOrders : 0;
-        const aovLast = ec.lastWeek.totalOrders ? ec.lastWeek.totalRevenue / ec.lastWeek.totalOrders : 0;
-        $("kpiAov").textContent = money2(aov);
-        changeText($("kpiAovChange"), aov, aovLast);
         $("kpiAbandoned").textContent = money(ec.thisWeek.abandonedCartValue);
         $("kpiAbandonedNote").textContent = `${ec.thisWeek.abandonedCarts} cart(s) this week`;
-        $("hlBestSeller").textContent = ec.topProductsWeek?.[0]?.name || "—";
         $("hlAbandon").textContent = money(ec.thisWeek.abandonedCartValue);
       }
-      if (ga && ec) {
-        const cr = ga.thisWeek.sessions ? (ec.thisWeek.totalOrders / ga.thisWeek.sessions) * 100 : 0;
-        const crLast = ga.lastWeek.sessions ? (ec.lastWeek.totalOrders / ga.lastWeek.sessions) * 100 : 0;
+      if (gp && ep) {
+        const cr = gp.sessions ? (ep.totalOrders / gp.sessions) * 100 : 0;
+        const crPrev = gp.prev.sessions ? (ep.prev.totalOrders / gp.prev.sessions) * 100 : 0;
         $("kpiConversion").textContent = cr.toFixed(2) + "%";
-        changeText($("kpiConversionChange"), cr, crLast);
+        changeText($("kpiConversionChange"), cr, crPrev, vs);
       }
 
       const active = promos.filter((p) => p.status === "active");
@@ -803,30 +860,54 @@
         return;
       }
       const ec = d.ecwid;
-      $("ecOrdersWeek").textContent = num(ec.thisWeek.totalOrders);
-      changeText($("ecOrdersWeekChange"), ec.thisWeek.totalOrders, ec.lastWeek.totalOrders);
-      $("ecRevenueWeek").textContent = money(ec.thisWeek.totalRevenue);
-      changeText($("ecRevenueWeekChange"), ec.thisWeek.totalRevenue, ec.lastWeek.totalRevenue);
-      $("ecOrdersMonth").textContent = num(ec.thisMonth.totalOrders);
-      changeText($("ecOrdersMonthChange"), ec.thisMonth.totalOrders, ec.lastMonth.totalOrders, "vs. last month");
-      $("ecRevenueMonth").textContent = money(ec.thisMonth.totalRevenue);
-      changeText($("ecRevenueMonthChange"), ec.thisMonth.totalRevenue, ec.lastMonth.totalRevenue, "vs. last month");
-      $("ecAbandonValue").textContent = money(ec.thisWeek.abandonedCartValue);
-      $("ecAbandonNote").textContent = `${ec.thisWeek.abandonedCarts} abandoned cart(s) this week • ${ec.thisMonth.abandonedCarts} this month (${money(ec.thisMonth.abandonedCartValue)})`;
-      $("stPending").textContent = ec.thisWeek.orderStatus.pending;
-      $("stProcessing").textContent = ec.thisWeek.orderStatus.processing;
-      $("stShipped").textContent = ec.thisWeek.orderStatus.shipped;
-      $("stDelivered").textContent = ec.thisWeek.orderStatus.delivered;
+      const vs = PERIOD_META[PERIOD].vs;
+      const ep = ecPeriod(ec);
+      const gp = gaPeriod(d.analytics && !d.analytics.error ? d.analytics : null);
+      if (ep) {
+        $("ecOrders").textContent = num(ep.totalOrders);
+        changeText($("ecOrdersChange"), ep.totalOrders, ep.prev.totalOrders, vs);
+        $("ecRevenue").textContent = money(ep.totalRevenue);
+        changeText($("ecRevenueChange"), ep.totalRevenue, ep.prev.totalRevenue, vs);
+        const aov = ep.totalOrders ? ep.totalRevenue / ep.totalOrders : 0;
+        const aovPrev = ep.prev.totalOrders ? ep.prev.totalRevenue / ep.prev.totalOrders : 0;
+        $("ecAov").textContent = money2(aov);
+        changeText($("ecAovChange"), aov, aovPrev, vs);
+        $("stPending").textContent = ep.orderStatus.pending;
+        $("stProcessing").textContent = ep.orderStatus.processing;
+        $("stShipped").textContent = ep.orderStatus.shipped;
+        $("stDelivered").textContent = ep.orderStatus.delivered;
+      }
+      // Cart abandonment rate comes from Google Analytics
+      if (gp && gp.cartAbandonmentRate !== null && gp.cartAbandonmentRate !== undefined) {
+        $("ecAbandonRate").textContent = gp.cartAbandonmentRate + "%";
+        const prevRate = gp.prev?.cartAbandonmentRate;
+        if (prevRate !== null && prevRate !== undefined) {
+          const el = $("ecAbandonRateChange");
+          const diff = gp.cartAbandonmentRate - prevRate;
+          // For abandonment, DOWN is good
+          el.textContent = `${diff <= 0 ? "▼" : "▲"} ${Math.abs(diff).toFixed(1)} pts ${vs}`;
+          el.className = "metric-change " + (diff <= 0 ? "up" : "down");
+        }
+        $("ecFunnelRate").textContent = gp.cartAbandonmentRate + "% abandoned";
+        $("ecFunnelNote").textContent = `${num(gp.addToCarts)} add-to-carts → ${num(gp.purchases)} purchases (Google Analytics, ${PERIOD_META[PERIOD].label.toLowerCase()})`;
+      } else {
+        $("ecAbandonRate").textContent = "—";
+        $("ecAbandonRateChange").textContent = "needs GA4 ecommerce tracking";
+        $("ecAbandonRateChange").className = "metric-change neutral";
+        $("ecFunnelRate").textContent = "—";
+        $("ecFunnelNote").textContent = "No add-to-cart events found in Google Analytics for this period. Make sure Ecwid's Google Analytics integration is connected so cart events flow into GA4.";
+      }
 
-      $("topProductsBody").innerHTML = (ec.topProductsWeek || []).length
-        ? ec.topProductsWeek.map((p) => `
+      const topList = ep ? ep.topProducts || [] : [];
+      $("topProductsBody").innerHTML = topList.length
+        ? topList.map((p) => `
           <tr>
             <td>${esc(p.name)}</td>
             <td>${num(p.quantity)}</td>
             <td>${money2(p.revenue)}</td>
             <td>${money2(p.quantity ? p.revenue / p.quantity : 0)}</td>
           </tr>`).join("")
-        : '<tr><td colspan="4" class="empty-note">No product sales yet this week.</td></tr>';
+        : '<tr><td colspan="4" class="empty-note">No product sales in this period.</td></tr>';
 
       $("discountBody").innerHTML = ["week", "month", "year"].map((k) => {
         const m = ec.discountMetrics[k];
@@ -882,23 +963,27 @@
         $("keyPagesBody").innerHTML = `<tr><td colspan="4" class="empty-note">${msg}</td></tr>`;
         return;
       }
-      $("dmSessions").textContent = num(ga.thisWeek.sessions);
-      changeText($("dmSessionsChange"), ga.thisWeek.sessions, ga.lastWeek.sessions);
-      $("dmUsers").textContent = num(ga.thisWeek.users);
-      changeText($("dmUsersChange"), ga.thisWeek.users, ga.lastWeek.users);
-      $("dmViews").textContent = num(ga.thisWeek.pageViews);
-      changeText($("dmViewsChange"), ga.thisWeek.pageViews, ga.lastWeek.pageViews);
-      const ec = d.ecwid && !d.ecwid.error ? d.ecwid : null;
-      if (ec && ga.thisWeek.sessions) {
-        $("dmConversion").textContent = ((ec.thisWeek.totalOrders / ga.thisWeek.sessions) * 100).toFixed(2) + "%";
+      const vs = PERIOD_META[PERIOD].vs;
+      const gp = gaPeriod(ga);
+      if (gp) {
+        $("dmSessions").textContent = num(gp.sessions);
+        changeText($("dmSessionsChange"), gp.sessions, gp.prev.sessions, vs);
+        $("dmUsers").textContent = num(gp.users);
+        changeText($("dmUsersChange"), gp.users, gp.prev.users, vs);
+        $("dmViews").textContent = num(gp.pageViews);
+        changeText($("dmViewsChange"), gp.pageViews, gp.prev.pageViews, vs);
       }
-      $("topPagesBody").innerHTML = (ga.topPages || []).map((p) =>
+      const ep = ecPeriod(d.ecwid && !d.ecwid.error ? d.ecwid : null);
+      if (ep && gp && gp.sessions) {
+        $("dmConversion").textContent = ((ep.totalOrders / gp.sessions) * 100).toFixed(2) + "%";
+      }
+      $("topPagesBody").innerHTML = perList(ga.topPages).map((p) =>
         `<tr><td>${esc(p.page)}</td><td>${num(p.views)}</td></tr>`).join("") ||
         '<tr><td colspan="2" class="empty-note">No data yet.</td></tr>';
-      $("topChannelsBody").innerHTML = (ga.topChannels || []).map((c) =>
+      $("topChannelsBody").innerHTML = perList(ga.topChannels).map((c) =>
         `<tr><td>${esc(c.channel)}</td><td>${num(c.sessions)}</td></tr>`).join("") ||
         '<tr><td colspan="2" class="empty-note">No data yet.</td></tr>';
-      $("keyPagesBody").innerHTML = (ga.keyPages || []).map((k) => {
+      $("keyPagesBody").innerHTML = perList(ga.keyPages).map((k) => {
         const p = k.viewsChangePercent;
         const changeCell = p === null || p === undefined
           ? '<span class="neutral">—</span>'
@@ -1025,13 +1110,7 @@
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         DATA = await resp.json();
         $("mockBanner").style.display = DATA.mock ? "block" : "none";
-        renderOverview(DATA);
-        renderPromotions(DATA);
-        renderEcommerce(DATA);
-        renderDigital(DATA);
-        renderCalendar(DATA);
-        renderSocial(DATA);
-        renderReview(DATA);
+        renderAll();
         $("lastUpdated").textContent =
           "Updated " + new Date(DATA.generatedAt).toLocaleString("en-US");
       } catch (err) {
@@ -1045,6 +1124,46 @@
         btn.textContent = "Refresh Data";
       }
     }
+
+    // ------------------------------------------------ period toggle wiring
+    function renderAll() {
+      if (!DATA) return;
+      document.querySelectorAll(".period-note").forEach((el) => {
+        el.textContent = PERIOD_META[PERIOD].note;
+      });
+      renderOverview(DATA);
+      renderPromotions(DATA);
+      renderEcommerce(DATA);
+      renderDigital(DATA);
+      renderCalendar(DATA);
+      renderSocial(DATA);
+      renderReview(DATA);
+    }
+    document.querySelectorAll(".period-btn").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        PERIOD = btn.dataset.period;
+        document.querySelectorAll(".period-btn").forEach((b) =>
+          b.classList.toggle("active", b === btn));
+        renderAll();
+      })
+    );
+
+    // ------------------------------------------------ Submit a New Promotion modal
+    const PROMO_FORM_URL = "https://api.leadconnectorhq.com/widget/form/HiSs6ID0Yw8nu5ISjech";
+    $("newPromoBtn").addEventListener("click", () => {
+      $("promoModalBody").innerHTML =
+        `<iframe src="${PROMO_FORM_URL}" title="Submit a New Promotion" allow="clipboard-write"></iframe>`;
+      $("promoModal").classList.add("open");
+    });
+    function closePromoModal() {
+      $("promoModal").classList.remove("open");
+      $("promoModalBody").innerHTML = ""; // reset the form for next open
+      load(); // pick up the new promotion once the 60s GHL cache rolls over
+    }
+    $("promoModalClose").addEventListener("click", closePromoModal);
+    $("promoModal").addEventListener("click", (e) => {
+      if (e.target === $("promoModal")) closePromoModal();
+    });
 
     $("subtitle").textContent = weekSubtitle();
     $("refreshBtn").addEventListener("click", load);

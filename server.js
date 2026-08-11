@@ -116,6 +116,31 @@ function getDateRange(period = "week") {
 const pct = (cur, prev) =>
   prev > 0 ? Number((((cur - prev) / prev) * 100).toFixed(1)) : null;
 
+// The three toggleable stat periods: last 7 days, month to date, year to date
+// — each with a comparable previous period.
+function buildPeriods() {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = 86400000;
+  const p7Start = new Date(+startOfToday - 6 * day);
+  return {
+    p7: {
+      start: p7Start, end: null,
+      prevStart: new Date(+p7Start - 7 * day), prevEnd: p7Start,
+    },
+    mtd: {
+      start: new Date(now.getFullYear(), now.getMonth(), 1), end: null,
+      prevStart: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+      prevEnd: new Date(now.getFullYear(), now.getMonth() - 1, now.getDate() + 1),
+    },
+    ytd: {
+      start: new Date(now.getFullYear(), 0, 1), end: null,
+      prevStart: new Date(now.getFullYear() - 1, 0, 1),
+      prevEnd: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1),
+    },
+  };
+}
+
 // ================================================================ ECWID
 const ECWID_BASE = `https://app.ecwid.com/api/v3/${ECWID_STORE_ID}`;
 let productCache = {};
@@ -252,7 +277,23 @@ async function getEcwidData() {
     abandonedMonth = { count: mo.length, value: mo.reduce((s, c) => s + (c.cartValue || 0), 0) };
   }
 
+  // Toggleable periods: last 7 days / month to date / year to date
+  const P = buildPeriods();
+  const periods = {};
+  for (const key of ["p7", "mtd", "ytd"]) {
+    const cur = between(P[key].start);
+    const prev = between(P[key].prevStart, P[key].prevEnd);
+    periods[key] = {
+      totalOrders: cur.length,
+      totalRevenue: revenue(cur),
+      orderStatus: orderStatusCounts(cur),
+      topProducts: topProducts(orders, P[key].start),
+      prev: { totalOrders: prev.length, totalRevenue: revenue(prev) },
+    };
+  }
+
   return remember("ecwid", {
+    periods,
     thisWeek: {
       totalOrders: thisWeek.length,
       totalRevenue: revenue(thisWeek),
@@ -541,99 +582,155 @@ async function getAnalytics() {
   const hit = cached("ga4");
   if (hit) return hit;
 
-  const { startDate: weekStart } = getDateRange("week");
-  const { startDate: lastWeekStart, endDate: lastWeekEnd } = getDateRange("lastWeek");
   const today = new Date();
-  const lastWeekEndInclusive = new Date(lastWeekEnd - 86400000);
+  const P = buildPeriods();
+  const PERIOD_KEYS = ["p7", "mtd", "ytd"];
+  const dayBefore = (d) => new Date(+d - 86400000);
+  const curRange = (k) => ({ startDate: iso(P[k].start), endDate: iso(today), name: k });
+  const prevRange = (k) => ({
+    startDate: iso(P[k].prevStart), endDate: iso(dayBefore(P[k].prevEnd)), name: k + "prev",
+  });
 
-  const [totals, pages, channels, keyPagesReport] = await Promise.all([
+  const TOTAL_METRICS = [
+    { name: "sessions" }, { name: "activeUsers" }, { name: "screenPageViews" },
+    { name: "addToCarts" }, { name: "ecommercePurchases" },
+  ];
+
+  // GA4 allows max 4 date ranges per request, so totals are split in two.
+  const [totalsA, totalsB, pages, channels, keyCur, keyPrev] = await Promise.all([
     ga4RunReport({
-      dateRanges: [
-        { startDate: iso(weekStart), endDate: iso(today), name: "thisWeek" },
-        { startDate: iso(lastWeekStart), endDate: iso(lastWeekEndInclusive), name: "lastWeek" },
-      ],
-      metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "screenPageViews" }],
+      dateRanges: [curRange("p7"), prevRange("p7"), curRange("mtd"), prevRange("mtd")],
+      metrics: TOTAL_METRICS,
     }),
     ga4RunReport({
-      dateRanges: [{ startDate: iso(weekStart), endDate: iso(today) }],
+      dateRanges: [curRange("ytd"), prevRange("ytd")],
+      metrics: TOTAL_METRICS,
+    }),
+    ga4RunReport({
+      dateRanges: PERIOD_KEYS.map(curRange),
       dimensions: [{ name: "pagePath" }],
       metrics: [{ name: "screenPageViews" }],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
-      limit: 5,
+      limit: 1000,
     }),
     ga4RunReport({
-      dateRanges: [{ startDate: iso(weekStart), endDate: iso(today) }],
+      dateRanges: PERIOD_KEYS.map(curRange),
       dimensions: [{ name: "sessionDefaultChannelGroup" }],
       metrics: [{ name: "sessions" }],
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-      limit: 5,
+      limit: 100,
     }),
-    // Key pages (home / catering / food truck), this week vs last week
     ga4RunReport({
-      dateRanges: [
-        { startDate: iso(weekStart), endDate: iso(today), name: "thisWeek" },
-        { startDate: iso(lastWeekStart), endDate: iso(lastWeekEndInclusive), name: "lastWeek" },
-      ],
+      dateRanges: PERIOD_KEYS.map(curRange),
       dimensions: [{ name: "pagePath" }],
       metrics: [{ name: "screenPageViews" }, { name: "activeUsers" }],
-      limit: 500,
+      limit: 1000,
+    }),
+    ga4RunReport({
+      dateRanges: PERIOD_KEYS.map(prevRange),
+      dimensions: [{ name: "pagePath" }],
+      metrics: [{ name: "screenPageViews" }, { name: "activeUsers" }],
+      limit: 1000,
     }),
   ]);
 
-  // Group page rows into the three key pages of schmidthaus.com
+  // ---- totals per period (with prev + cart abandonment rate) ----
+  const totalsByRange = {};
+  for (const row of [...(totalsA.rows || []), ...(totalsB.rows || [])]) {
+    const range = row.dimensionValues?.[0]?.value || "";
+    totalsByRange[range] = {
+      sessions: Number(row.metricValues?.[0]?.value || 0),
+      users: Number(row.metricValues?.[1]?.value || 0),
+      pageViews: Number(row.metricValues?.[2]?.value || 0),
+      addToCarts: Number(row.metricValues?.[3]?.value || 0),
+      purchases: Number(row.metricValues?.[4]?.value || 0),
+    };
+  }
+  const abandonRate = (t) =>
+    t && t.addToCarts > 0
+      ? Number((((t.addToCarts - t.purchases) / t.addToCarts) * 100).toFixed(1))
+      : null;
+  const EMPTY_T = { sessions: 0, users: 0, pageViews: 0, addToCarts: 0, purchases: 0 };
+  const periods = {};
+  for (const k of PERIOD_KEYS) {
+    const cur = totalsByRange[k] || EMPTY_T;
+    const prev = totalsByRange[k + "prev"] || EMPTY_T;
+    periods[k] = {
+      ...cur,
+      cartAbandonmentRate: abandonRate(cur),
+      prev: { ...prev, cartAbandonmentRate: abandonRate(prev) },
+    };
+  }
+
+  // ---- top pages / channels per period ----
+  const splitByRange = (report, mapRow) => {
+    const out = { p7: [], mtd: [], ytd: [] };
+    for (const row of report.rows || []) {
+      const range = row.dimensionValues?.[1]?.value || "";
+      if (out[range]) out[range].push(mapRow(row));
+    }
+    for (const k of PERIOD_KEYS) out[k] = out[k].slice(0, 5);
+    return out;
+  };
+  const topPages = splitByRange(pages, (r) => ({
+    page: r.dimensionValues[0].value,
+    views: Number(r.metricValues[0].value),
+  }));
+  const topChannels = splitByRange(channels, (r) => ({
+    channel: r.dimensionValues[0].value,
+    sessions: Number(r.metricValues[0].value),
+  }));
+
+  // ---- key pages (home / catering / food truck) per period ----
   const KEY_PAGE_GROUPS = [
     { label: "Home", match: (p) => p === "/" || p === "/home" || p.startsWith("/?") },
     { label: "Catering", match: (p) => p.includes("catering") },
     { label: "Food Truck", match: (p) => p.includes("truck") },
   ];
-  const keyPages = KEY_PAGE_GROUPS.map((g) => ({
-    label: g.label,
-    thisWeek: { views: 0, users: 0 },
-    lastWeek: { views: 0, users: 0 },
-  }));
-  for (const row of keyPagesReport.rows || []) {
-    const pagePath = (row.dimensionValues?.[0]?.value || "").toLowerCase();
-    const range = row.dimensionValues?.[1]?.value || "thisWeek";
-    const bucket = range === "lastWeek" || range === "date_range_1" ? "lastWeek" : "thisWeek";
-    const views = Number(row.metricValues?.[0]?.value || 0);
-    const users = Number(row.metricValues?.[1]?.value || 0);
-    for (let i = 0; i < KEY_PAGE_GROUPS.length; i++) {
-      if (KEY_PAGE_GROUPS[i].match(pagePath)) {
-        keyPages[i][bucket].views += views;
-        keyPages[i][bucket].users += users;
-        break;
+  const keyPages = {};
+  for (const k of PERIOD_KEYS) {
+    keyPages[k] = KEY_PAGE_GROUPS.map((g) => ({
+      label: g.label,
+      thisWeek: { views: 0, users: 0 },   // "current period" (name kept for UI compat)
+      lastWeek: { views: 0, users: 0 },   // "previous period"
+    }));
+  }
+  const addKeyRows = (report, bucket, stripPrev) => {
+    for (const row of report.rows || []) {
+      const pagePath = (row.dimensionValues?.[0]?.value || "").toLowerCase();
+      let range = row.dimensionValues?.[1]?.value || "";
+      if (stripPrev) range = range.replace(/prev$/, "");
+      if (!keyPages[range]) continue;
+      const views = Number(row.metricValues?.[0]?.value || 0);
+      const users = Number(row.metricValues?.[1]?.value || 0);
+      for (let i = 0; i < KEY_PAGE_GROUPS.length; i++) {
+        if (KEY_PAGE_GROUPS[i].match(pagePath)) {
+          keyPages[range][i][bucket].views += views;
+          keyPages[range][i][bucket].users += users;
+          break;
+        }
       }
     }
+  };
+  addKeyRows(keyCur, "thisWeek", false);
+  addKeyRows(keyPrev, "lastWeek", true);
+  for (const k of PERIOD_KEYS) {
+    keyPages[k].forEach((kp) => {
+      kp.viewsChangePercent = pct(kp.thisWeek.views, kp.lastWeek.views);
+    });
   }
-  keyPages.forEach((k) => {
-    k.viewsChangePercent = pct(k.thisWeek.views, k.lastWeek.views);
-  });
 
-  const byRange = {};
-  for (const row of totals.rows || []) {
-    const range = row.dimensionValues?.[0]?.value || "thisWeek";
-    byRange[range] = {
-      sessions: Number(row.metricValues?.[0]?.value || 0),
-      users: Number(row.metricValues?.[1]?.value || 0),
-      pageViews: Number(row.metricValues?.[2]?.value || 0),
-    };
-  }
-  // When two date ranges are used GA4 adds a dateRange dimension automatically
-  const thisWeek = byRange["thisWeek"] || byRange["date_range_0"] || { sessions: 0, users: 0, pageViews: 0 };
-  const lastWeek = byRange["lastWeek"] || byRange["date_range_1"] || { sessions: 0, users: 0, pageViews: 0 };
+  // Legacy weekly fields (used by the Review tab logic) map to the 7-day period
+  const thisWeek = { sessions: periods.p7.sessions, users: periods.p7.users, pageViews: periods.p7.pageViews };
+  const lastWeek = { sessions: periods.p7.prev.sessions, users: periods.p7.prev.users, pageViews: periods.p7.prev.pageViews };
 
   return remember("ga4", {
+    periods,
     thisWeek,
     lastWeek,
     sessionsChangePercent: pct(thisWeek.sessions, lastWeek.sessions),
-    topPages: (pages.rows || []).map((r) => ({
-      page: r.dimensionValues[0].value,
-      views: Number(r.metricValues[0].value),
-    })),
-    topChannels: (channels.rows || []).map((r) => ({
-      channel: r.dimensionValues[0].value,
-      sessions: Number(r.metricValues[0].value),
-    })),
+    topPages,
+    topChannels,
     keyPages,
     lastUpdated: new Date().toISOString(),
   });
@@ -845,7 +942,33 @@ function buildReview({ ecwid, promos, analytics }) {
 
 // ================================================================ MOCK DATA
 function mockEcwid() {
+  const mkPeriod = (o, r, po, pr, status, top) => ({
+    totalOrders: o, totalRevenue: r, orderStatus: status, topProducts: top,
+    prev: { totalOrders: po, totalRevenue: pr },
+  });
+  const topWeek = [
+    { productId: 1, name: "Bahama Mama Sausages (4-pack)", quantity: 26, revenue: 624.0 },
+    { productId: 2, name: "Jumbo Cream Puff Kit", quantity: 18, revenue: 522.0 },
+    { productId: 3, name: "German Potato Salad (Family Size)", quantity: 15, revenue: 285.0 },
+    { productId: 4, name: "Sauerkraut Balls (Frozen, 24ct)", quantity: 12, revenue: 216.0 },
+    { productId: 5, name: "Schmidt's Signature Mustard", quantity: 11, revenue: 98.45 },
+  ];
+  const topYear = [
+    { productId: 1, name: "Bahama Mama Sausages (4-pack)", quantity: 512, revenue: 12288.0 },
+    { productId: 2, name: "Jumbo Cream Puff Kit", quantity: 388, revenue: 11252.0 },
+    { productId: 3, name: "German Potato Salad (Family Size)", quantity: 240, revenue: 4560.0 },
+    { productId: 4, name: "Sauerkraut Balls (Frozen, 24ct)", quantity: 198, revenue: 3564.0 },
+  ];
   return {
+    periods: {
+      p7: mkPeriod(42, 3860.5, 38, 3421.75,
+        { pending: 3, processing: 6, shipped: 21, delivered: 12, other: 0 }, topWeek),
+      mtd: mkPeriod(61, 5612.4, 54, 4890.2,
+        { pending: 3, processing: 8, shipped: 30, delivered: 20, other: 0 },
+        topWeek.map((p) => ({ ...p, quantity: Math.round(p.quantity * 1.5), revenue: p.revenue * 1.5 }))),
+      ytd: mkPeriod(1240, 126540.2, 1105, 112380.6,
+        { pending: 3, processing: 8, shipped: 640, delivered: 589, other: 0 }, topYear),
+    },
     thisWeek: {
       totalOrders: 42, totalRevenue: 3860.5, abandonedCarts: 9, abandonedCartValue: 742.18,
       orderStatus: { pending: 3, processing: 6, shipped: 21, delivered: 12, other: 0 },
@@ -921,29 +1044,46 @@ function mockPromotions() {
 }
 
 function mockAnalytics() {
+  const mkTotals = (mult) => ({
+    sessions: Math.round(4820 * mult), users: Math.round(3910 * mult),
+    pageViews: Math.round(11240 * mult),
+    addToCarts: Math.round(310 * mult), purchases: Math.round(96 * mult),
+  });
+  const withRate = (t) => ({
+    ...t,
+    cartAbandonmentRate: Number((((t.addToCarts - t.purchases) / t.addToCarts) * 100).toFixed(1)),
+  });
+  const mkPages = (mult) => [
+    { page: "/", views: Math.round(3120 * mult) },
+    { page: "/menu", views: Math.round(2210 * mult) },
+    { page: "/store", views: Math.round(1480 * mult) },
+    { page: "/catering", views: Math.round(990 * mult) },
+    { page: "/food-truck", views: Math.round(720 * mult) },
+  ];
+  const mkChannels = (mult) => [
+    { channel: "Organic Search", sessions: Math.round(2110 * mult) },
+    { channel: "Direct", sessions: Math.round(1290 * mult) },
+    { channel: "Organic Social", sessions: Math.round(740 * mult) },
+    { channel: "Referral", sessions: Math.round(410 * mult) },
+    { channel: "Email", sessions: Math.round(270 * mult) },
+  ];
+  const mkKey = (mult) => [
+    { label: "Home", thisWeek: { views: Math.round(3120 * mult), users: Math.round(2480 * mult) }, lastWeek: { views: Math.round(2870 * mult), users: Math.round(2260 * mult) }, viewsChangePercent: 8.7 },
+    { label: "Catering", thisWeek: { views: Math.round(990 * mult), users: Math.round(810 * mult) }, lastWeek: { views: Math.round(1080 * mult), users: Math.round(890 * mult) }, viewsChangePercent: -8.3 },
+    { label: "Food Truck", thisWeek: { views: Math.round(720 * mult), users: Math.round(615 * mult) }, lastWeek: { views: Math.round(540 * mult), users: Math.round(470 * mult) }, viewsChangePercent: 33.3 },
+  ];
   return {
+    periods: {
+      p7: { ...withRate(mkTotals(1)), prev: withRate(mkTotals(0.89)) },
+      mtd: { ...withRate(mkTotals(1.6)), prev: withRate(mkTotals(1.5)) },
+      ytd: { ...withRate(mkTotals(32)), prev: withRate(mkTotals(29)) },
+    },
     thisWeek: { sessions: 4820, users: 3910, pageViews: 11240 },
     lastWeek: { sessions: 4275, users: 3512, pageViews: 10130 },
     sessionsChangePercent: 12.7,
-    topPages: [
-      { page: "/", views: 3120 },
-      { page: "/menu", views: 2210 },
-      { page: "/store", views: 1480 },
-      { page: "/catering", views: 990 },
-      { page: "/food-truck", views: 720 },
-    ],
-    topChannels: [
-      { channel: "Organic Search", sessions: 2110 },
-      { channel: "Direct", sessions: 1290 },
-      { channel: "Organic Social", sessions: 740 },
-      { channel: "Referral", sessions: 410 },
-      { channel: "Email", sessions: 270 },
-    ],
-    keyPages: [
-      { label: "Home", thisWeek: { views: 3120, users: 2480 }, lastWeek: { views: 2870, users: 2260 }, viewsChangePercent: 8.7 },
-      { label: "Catering", thisWeek: { views: 990, users: 810 }, lastWeek: { views: 1080, users: 890 }, viewsChangePercent: -8.3 },
-      { label: "Food Truck", thisWeek: { views: 720, users: 615 }, lastWeek: { views: 540, users: 470 }, viewsChangePercent: 33.3 },
-    ],
+    topPages: { p7: mkPages(1), mtd: mkPages(1.6), ytd: mkPages(32) },
+    topChannels: { p7: mkChannels(1), mtd: mkChannels(1.6), ytd: mkChannels(32) },
+    keyPages: { p7: mkKey(1), mtd: mkKey(1.6), ytd: mkKey(32) },
     lastUpdated: new Date().toISOString(),
   };
 }
