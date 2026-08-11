@@ -45,6 +45,8 @@ const {
   PROMO_PIPELINE_NAME = "Schmidt Marketing Projects",
   PROMO_STAGE_ID = "",
   PROMO_STAGE_NAME = "Upcoming Events",
+  BANQUET_PIPELINE_NAME = "Banquet House Request",
+  CATERING_PIPELINE_NAMES = "Catering Menu Request,Catering Requests",
   GA4_PROPERTY_ID = "",
   GOOGLE_SERVICE_ACCOUNT_JSON = "",
   GOOGLE_OAUTH_REFRESH_TOKEN = "",
@@ -488,6 +490,101 @@ async function getPromotions() {
     .sort((a, b) => (a.startISO || "") < (b.startISO || "") ? -1 : 1);
 
   return remember("promos", { promotions, lastUpdated: new Date().toISOString() });
+}
+
+// ---------------- Lead counts from other GHL pipelines ----------------
+// Banquet House Request pipeline + combined Catering Menu Request /
+// Catering Requests pipelines, counted by opportunity createdAt per period.
+
+async function fetchAllOppsForPipeline(pipelineId) {
+  const all = [];
+  let path2 = `/opportunities/search?location_id=${encodeURIComponent(GHL_LOCATION_ID)}&pipeline_id=${encodeURIComponent(pipelineId)}&limit=100`;
+  for (let page = 0; page < 20; page++) {
+    const data = await ghlGet(path2);
+    const opps = data.opportunities || [];
+    all.push(...opps);
+    const next = data.meta?.nextPageUrl;
+    if (!next || opps.length === 0) break;
+    try {
+      const u = new URL(next);
+      path2 = u.pathname + u.search;
+    } catch { break; }
+  }
+  return all;
+}
+
+async function getLeads() {
+  if (MOCK) return mockLeads();
+  if (!GHL_PIT) return { error: "GHL_PIT not configured" };
+  const hit = cached("leads");
+  if (hit) return hit;
+
+  const pipelines = await getPipelines();
+  const matchPipes = (names) => {
+    const seen = new Set();
+    const out = [];
+    for (const needle of names) {
+      const n = needle.toLowerCase().trim();
+      if (!n) continue;
+      for (const p of pipelines) {
+        if ((p.name || "").toLowerCase().includes(n) && !seen.has(p.id)) {
+          seen.add(p.id);
+          out.push(p);
+        }
+      }
+    }
+    return out;
+  };
+
+  const P = buildPeriods();
+  const countGroup = async (pipes) => {
+    let opps = [];
+    for (const p of pipes) opps = opps.concat(await fetchAllOppsForPipeline(p.id));
+    const createdBetween = (a, b) =>
+      opps.filter((o) => {
+        const d = new Date(o.createdAt || o.dateAdded || 0);
+        return d >= a && (!b || d < b);
+      }).length;
+    const periods = {};
+    for (const k of ["p7", "mtd", "ytd"]) {
+      periods[k] = {
+        count: createdBetween(P[k].start),
+        prev: createdBetween(P[k].prevStart, P[k].prevEnd),
+      };
+    }
+    return { total: opps.length, periods, pipelines: pipes.map((p) => p.name) };
+  };
+
+  const [banquet, catering] = await Promise.all([
+    countGroup(matchPipes([BANQUET_PIPELINE_NAME])),
+    countGroup(matchPipes(CATERING_PIPELINE_NAMES.split(","))),
+  ]);
+
+  return remember("leads", { banquet, catering, lastUpdated: new Date().toISOString() });
+}
+
+function mockLeads() {
+  return {
+    banquet: {
+      total: 87,
+      periods: {
+        p7: { count: 6, prev: 4 },
+        mtd: { count: 9, prev: 7 },
+        ytd: { count: 87, prev: 74 },
+      },
+      pipelines: ["Banquet House Request"],
+    },
+    catering: {
+      total: 142,
+      periods: {
+        p7: { count: 11, prev: 13 },
+        mtd: { count: 16, prev: 14 },
+        ytd: { count: 142, prev: 118 },
+      },
+      pipelines: ["Catering Menu Request", "Catering Requests"],
+    },
+    lastUpdated: new Date().toISOString(),
+  };
 }
 
 // ================================================================ GA4
@@ -1118,6 +1215,7 @@ app.get("/health", (req, res) =>
 
 app.get("/api/ecwid", safe(() => getEcwidData()));
 app.get("/api/promotions", safe(() => getPromotions()));
+app.get("/api/leads", safe(() => getLeads()));
 app.get("/api/analytics", safe(() => getAnalytics()));
 app.get("/api/social", safe((req) => getSocialSuggestions(req.query.refresh === "1")));
 app.get("/api/review", safe(async () => {
@@ -1131,14 +1229,15 @@ app.get("/api/review", safe(async () => {
 
 // One call for the whole dashboard
 app.get("/api/all", safe(async () => {
-  const [ecwid, promotions, analytics, social] = await Promise.all([
+  const [ecwid, promotions, analytics, social, leads] = await Promise.all([
     getEcwidData().catch((e) => ({ error: e.message })),
     getPromotions().catch((e) => ({ error: e.message })),
     getAnalytics().catch((e) => ({ error: e.message })),
     getSocialSuggestions().catch((e) => ({ error: e.message, suggestions: [] })),
+    getLeads().catch((e) => ({ error: e.message })),
   ]);
   return {
-    ecwid, promotions, analytics, social,
+    ecwid, promotions, analytics, social, leads,
     review: buildReview({ ecwid, promos: promotions, analytics }),
     mock: MOCK,
     generatedAt: new Date().toISOString(),

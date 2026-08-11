@@ -1,0 +1,36 @@
+<!-- ============================================================
+  Schmidt's Marketing Hot Sheet — Embed Code
+  Paste this into a HighLevel (Smart 1 Suite) page:
+  Page Builder → add a "Custom Code" / HTML element → paste → save.
+============================================================= -->
+
+<div id="hotsheet-embed" style="width:100%;">
+  <iframe
+    id="hotsheet-frame"
+    src="https://schmidt-marketing-hotsheet.onrender.com/"
+    title="Schmidt's Marketing Hot Sheet"
+    style="width:100%; height:1400px; border:0; border-radius:12px; background:#f3f3f3;"
+    loading="lazy"
+    allow="clipboard-write">
+  </iframe>
+  <noscript>
+    <p style="font-family:Arial,sans-serif;">
+      View the dashboard at
+      <a href="https://schmidt-marketing-hotsheet.onrender.com/">schmidt-marketing-hotsheet.onrender.com</a>
+    </p>
+  </noscript>
+</div>
+
+<script>
+  // Keeps the iframe tall enough on phones, where the dashboard stacks
+  // into a single column and gets much longer.
+  (function () {
+    var frame = document.getElementById("hotsheet-frame");
+    function sizeFrame() {
+      var w = window.innerWidth;
+      frame.style.height = (w < 550 ? 2600 : w < 800 ? 2000 : 1400) + "px";
+    }
+    sizeFrame();
+    window.addEventListener("resize", sizeFrame);
+  })();
+</script>

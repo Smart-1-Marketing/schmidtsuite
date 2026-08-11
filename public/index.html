@@ -327,6 +327,16 @@
           <div class="metric-value" id="kpiUsers">—</div>
           <div class="metric-change neutral" id="kpiUsersChange">vs. last week —</div>
         </div>
+        <div class="metric-card">
+          <div class="metric-label">Banquet Requests</div>
+          <div class="metric-value" id="kpiBanquet">—</div>
+          <div class="metric-change neutral" id="kpiBanquetChange">Banquet House Request pipeline</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Catering Leads</div>
+          <div class="metric-value" id="kpiCatering">—</div>
+          <div class="metric-change neutral" id="kpiCateringChange">Catering Menu + Catering Requests pipelines</div>
+        </div>
       </div>
       <div class="two-column">
         <div class="card">
@@ -739,6 +749,29 @@
         $("kpiConversion").textContent = cr.toFixed(2) + "%";
         changeText($("kpiConversionChange"), cr, crPrev, vs);
       }
+
+      // Lead counts from GHL pipelines (new opportunities in the selected period)
+      const leads = d.leads && !d.leads.error ? d.leads : null;
+      const renderLead = (group, valId, chgId) => {
+        if (!leads || !leads[group]) {
+          $(valId).textContent = "—";
+          if (d.leads?.error) $(chgId).textContent = "Couldn't load: " + d.leads.error;
+          return;
+        }
+        const g = leads[group];
+        const per = g.periods?.[PERIOD];
+        $(valId).textContent = num(per ? per.count : g.total);
+        const el = $(chgId);
+        if (per && per.prev > 0) {
+          changeText(el, per.count, per.prev, vs);
+          el.textContent += ` • ${num(g.total)} total`;
+        } else {
+          el.textContent = `${num(g.total)} total in pipeline`;
+          el.className = "metric-change neutral";
+        }
+      };
+      renderLead("banquet", "kpiBanquet", "kpiBanquetChange");
+      renderLead("catering", "kpiCatering", "kpiCateringChange");
 
       const active = promos.filter((p) => p.status === "active");
       const upcoming = promos.filter((p) => p.status === "upcoming");
