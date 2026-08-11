@@ -474,7 +474,7 @@
     <section id="digital" class="panel">
       <div class="section-header">
         <h2>Digital Marketing Performance</h2>
-        <div class="section-note">Website analytics, email and paid media</div>
+        <div class="section-note">Website analytics, key pages and email</div>
       </div>
       <div class="metric-grid">
         <div class="metric-card">
@@ -535,15 +535,12 @@
           </div>
         </div>
         <div class="card">
-          <h3>Paid Advertising</h3>
+          <h3>Key Pages This Week</h3>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Platform</th><th>Spend</th><th>Revenue</th><th>ROAS</th></tr></thead>
-              <tbody>
-                <tr><td>Facebook</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>Instagram</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>TikTok</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>Google</td><td>—</td><td>—</td><td>—</td></tr>
+              <thead><tr><th>Page</th><th>Views</th><th>Users</th><th>vs Last Week</th></tr></thead>
+              <tbody id="keyPagesBody">
+                <tr><td colspan="4" class="empty-note">Connect Google Analytics to populate.</td></tr>
               </tbody>
             </table>
           </div>
@@ -882,6 +879,7 @@
         const msg = d.analytics?.error ? esc(d.analytics.error) : "Connect Google Analytics to populate.";
         $("topPagesBody").innerHTML = `<tr><td colspan="2" class="empty-note">${msg}</td></tr>`;
         $("topChannelsBody").innerHTML = `<tr><td colspan="2" class="empty-note">${msg}</td></tr>`;
+        $("keyPagesBody").innerHTML = `<tr><td colspan="4" class="empty-note">${msg}</td></tr>`;
         return;
       }
       $("dmSessions").textContent = num(ga.thisWeek.sessions);
@@ -900,6 +898,18 @@
       $("topChannelsBody").innerHTML = (ga.topChannels || []).map((c) =>
         `<tr><td>${esc(c.channel)}</td><td>${num(c.sessions)}</td></tr>`).join("") ||
         '<tr><td colspan="2" class="empty-note">No data yet.</td></tr>';
+      $("keyPagesBody").innerHTML = (ga.keyPages || []).map((k) => {
+        const p = k.viewsChangePercent;
+        const changeCell = p === null || p === undefined
+          ? '<span class="neutral">—</span>'
+          : `<span class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "▲" : "▼"} ${Math.abs(p).toFixed(1)}%</span>`;
+        return `<tr>
+          <td>${esc(k.label)}</td>
+          <td>${num(k.thisWeek.views)}</td>
+          <td>${num(k.thisWeek.users)}</td>
+          <td>${changeCell}</td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="4" class="empty-note">No data yet.</td></tr>';
     }
 
     function renderCalendar(d) {

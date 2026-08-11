@@ -540,7 +540,7 @@ async function getAnalytics() {
   const today = new Date();
   const lastWeekEndInclusive = new Date(lastWeekEnd - 86400000);
 
-  const [totals, pages, channels] = await Promise.all([
+  const [totals, pages, channels, keyPagesReport] = await Promise.all([
     ga4RunReport({
       dateRanges: [
         { startDate: iso(weekStart), endDate: iso(today), name: "thisWeek" },
@@ -562,7 +562,46 @@ async function getAnalytics() {
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       limit: 5,
     }),
+    // Key pages (home / catering / food truck), this week vs last week
+    ga4RunReport({
+      dateRanges: [
+        { startDate: iso(weekStart), endDate: iso(today), name: "thisWeek" },
+        { startDate: iso(lastWeekStart), endDate: iso(lastWeekEndInclusive), name: "lastWeek" },
+      ],
+      dimensions: [{ name: "pagePath" }],
+      metrics: [{ name: "screenPageViews" }, { name: "activeUsers" }],
+      limit: 500,
+    }),
   ]);
+
+  // Group page rows into the three key pages of schmidthaus.com
+  const KEY_PAGE_GROUPS = [
+    { label: "Home", match: (p) => p === "/" || p === "/home" || p.startsWith("/?") },
+    { label: "Catering", match: (p) => p.includes("catering") },
+    { label: "Food Truck", match: (p) => p.includes("truck") },
+  ];
+  const keyPages = KEY_PAGE_GROUPS.map((g) => ({
+    label: g.label,
+    thisWeek: { views: 0, users: 0 },
+    lastWeek: { views: 0, users: 0 },
+  }));
+  for (const row of keyPagesReport.rows || []) {
+    const pagePath = (row.dimensionValues?.[0]?.value || "").toLowerCase();
+    const range = row.dimensionValues?.[1]?.value || "thisWeek";
+    const bucket = range === "lastWeek" || range === "date_range_1" ? "lastWeek" : "thisWeek";
+    const views = Number(row.metricValues?.[0]?.value || 0);
+    const users = Number(row.metricValues?.[1]?.value || 0);
+    for (let i = 0; i < KEY_PAGE_GROUPS.length; i++) {
+      if (KEY_PAGE_GROUPS[i].match(pagePath)) {
+        keyPages[i][bucket].views += views;
+        keyPages[i][bucket].users += users;
+        break;
+      }
+    }
+  }
+  keyPages.forEach((k) => {
+    k.viewsChangePercent = pct(k.thisWeek.views, k.lastWeek.views);
+  });
 
   const byRange = {};
   for (const row of totals.rows || []) {
@@ -589,6 +628,7 @@ async function getAnalytics() {
       channel: r.dimensionValues[0].value,
       sessions: Number(r.metricValues[0].value),
     })),
+    keyPages,
     lastUpdated: new Date().toISOString(),
   });
 }
@@ -892,6 +932,11 @@ function mockAnalytics() {
       { channel: "Organic Social", sessions: 740 },
       { channel: "Referral", sessions: 410 },
       { channel: "Email", sessions: 270 },
+    ],
+    keyPages: [
+      { label: "Home", thisWeek: { views: 3120, users: 2480 }, lastWeek: { views: 2870, users: 2260 }, viewsChangePercent: 8.7 },
+      { label: "Catering", thisWeek: { views: 990, users: 810 }, lastWeek: { views: 1080, users: 890 }, viewsChangePercent: -8.3 },
+      { label: "Food Truck", thisWeek: { views: 720, users: 615 }, lastWeek: { views: 540, users: 470 }, viewsChangePercent: 33.3 },
     ],
     lastUpdated: new Date().toISOString(),
   };
