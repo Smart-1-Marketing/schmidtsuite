@@ -47,6 +47,9 @@ const {
   PROMO_STAGE_NAME = "Upcoming Events",
   GA4_PROPERTY_ID = "",
   GOOGLE_SERVICE_ACCOUNT_JSON = "",
+  GOOGLE_OAUTH_CLIENT_ID = "",
+  GOOGLE_OAUTH_CLIENT_SECRET = "",
+  GOOGLE_OAUTH_REFRESH_TOKEN = "",
   OPENAI_API_KEY,
   OPENAI_MODEL = "gpt-4o-mini",
   ALLOWED_ORIGIN = "*",
@@ -441,7 +444,17 @@ async function getPromotions() {
 }
 
 // ================================================================ GA4
+// Two auth modes, in priority order:
+//   1. OAuth refresh token (GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN)
+//      — reads GA as YOUR Google account; works with plain Viewer access,
+//        no GA admin needed. Get a refresh token via /auth/google.
+//   2. Service account (GOOGLE_SERVICE_ACCOUNT_JSON)
+//      — needs a GA admin to add the service-account email as Viewer.
 let gaToken = { token: null, exp: 0 };
+
+const OAUTH_CONFIGURED =
+  GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET && GOOGLE_OAUTH_REFRESH_TOKEN;
+const GA_CONFIGURED = OAUTH_CONFIGURED || !!GOOGLE_SERVICE_ACCOUNT_JSON;
 
 function b64url(input) {
   return Buffer.from(input).toString("base64url");
@@ -449,6 +462,26 @@ function b64url(input) {
 
 async function ga4AccessToken() {
   if (gaToken.token && Date.now() < gaToken.exp - 60000) return gaToken.token;
+
+  // ---- Mode 1: OAuth refresh token (no GA admin required) ----
+  if (OAUTH_CONFIGURED) {
+    const resp = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: GOOGLE_OAUTH_CLIENT_SECRET,
+        refresh_token: GOOGLE_OAUTH_REFRESH_TOKEN,
+      }),
+    });
+    if (!resp.ok) throw new Error(`Google OAuth refresh failed: ${resp.status} ${await resp.text()}`);
+    const data = await resp.json();
+    gaToken = { token: data.access_token, exp: Date.now() + data.expires_in * 1000 };
+    return gaToken.token;
+  }
+
+  // ---- Mode 2: Service account JWT ----
   const sa = JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON);
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -496,8 +529,8 @@ const iso = (d) => d.toISOString().slice(0, 10);
 
 async function getAnalytics() {
   if (MOCK) return mockAnalytics();
-  if (!GA4_PROPERTY_ID || !GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return { error: "GA4 not configured: set GA4_PROPERTY_ID and GOOGLE_SERVICE_ACCOUNT_JSON" };
+  if (!GA4_PROPERTY_ID || !GA_CONFIGURED) {
+    return { error: "GA4 not configured: set GA4_PROPERTY_ID plus either the GOOGLE_OAUTH_* trio (visit /auth/google to get a refresh token) or GOOGLE_SERVICE_ACCOUNT_JSON" };
   }
   const hit = cached("ga4");
   if (hit) return hit;
@@ -559,6 +592,71 @@ async function getAnalytics() {
     lastUpdated: new Date().toISOString(),
   });
 }
+
+// ---------------- One-time OAuth consent helper ----------------
+// Visit /auth/google once (locally or on Render) to authorize with the
+// Google account that already has Viewer access on the GA4 property.
+// The callback page shows the refresh token to paste into
+// GOOGLE_OAUTH_REFRESH_TOKEN. Requires GOOGLE_OAUTH_CLIENT_ID + SECRET,
+// and the redirect URI below added to the OAuth client in Google Cloud.
+function oauthRedirectUri(req) {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  return `${proto}://${req.get("host")}/auth/google/callback`;
+}
+
+app.get("/auth/google", (req, res) => {
+  if (!GOOGLE_OAUTH_CLIENT_ID || !GOOGLE_OAUTH_CLIENT_SECRET) {
+    return res.status(500).send(
+      "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET first (Google Cloud → APIs & Services → Credentials → OAuth client ID, type: Web application), and add this redirect URI to it: " +
+      oauthRedirectUri(req)
+    );
+  }
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", GOOGLE_OAUTH_CLIENT_ID);
+  url.searchParams.set("redirect_uri", oauthRedirectUri(req));
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "https://www.googleapis.com/auth/analytics.readonly");
+  url.searchParams.set("access_type", "offline");
+  url.searchParams.set("prompt", "consent");
+  res.redirect(url.toString());
+});
+
+app.get("/auth/google/callback", async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) return res.status(400).send("Missing ?code — start at /auth/google");
+    const resp = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: GOOGLE_OAUTH_CLIENT_SECRET,
+        redirect_uri: oauthRedirectUri(req),
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.refresh_token) {
+      return res.status(500).send(
+        "Token exchange failed or no refresh_token returned. Response: " +
+        JSON.stringify(data).slice(0, 500) +
+        " — try again from /auth/google (the 'prompt=consent' step is what forces a refresh token)."
+      );
+    }
+    res.send(`
+      <div style="font-family:Arial;max-width:700px;margin:40px auto;line-height:1.6;">
+        <h2 style="color:#9f1d20;">Google Analytics connected ✔</h2>
+        <p>Copy this value into the <code>GOOGLE_OAUTH_REFRESH_TOKEN</code> environment
+        variable (Render → your service → Environment), then redeploy:</p>
+        <textarea style="width:100%;height:80px;font-family:monospace;" readonly>${data.refresh_token}</textarea>
+        <p style="color:#747474;font-size:13px;">Keep it secret — it grants read access to
+        your Google Analytics. This page is the only time it is shown; it is not stored anywhere.</p>
+      </div>`);
+  } catch (err) {
+    res.status(500).send("OAuth error: " + err.message);
+  }
+});
 
 // ================================================================ SOCIAL (OpenAI)
 const SOCIAL_CACHE_MS = 12 * 60 * 60 * 1000; // refresh twice a day
@@ -885,6 +983,6 @@ app.listen(PORT, () => {
   console.log(`   Mock mode:  ${MOCK ? "ON (sample data)" : "off"}`);
   console.log(`   Ecwid:      ${ECWID_API_TOKEN ? "configured" : "NOT configured"} (store ${ECWID_STORE_ID})`);
   console.log(`   GHL:        ${GHL_PIT ? "configured" : "NOT configured"} (location ${GHL_LOCATION_ID})`);
-  console.log(`   GA4:        ${GA4_PROPERTY_ID && GOOGLE_SERVICE_ACCOUNT_JSON ? "configured" : "NOT configured"}`);
+  console.log(`   GA4:        ${GA4_PROPERTY_ID && GA_CONFIGURED ? `configured (${OAUTH_CONFIGURED ? "OAuth" : "service account"})` : "NOT configured"}`);
   console.log(`   OpenAI:     ${OPENAI_API_KEY ? "configured" : "NOT configured"} (${OPENAI_MODEL})\n`);
 });

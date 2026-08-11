@@ -49,10 +49,42 @@ MOCK_MODE=true npm start
 | `GHL_PIT` | GoHighLevel Private Integration Token (`pit-…`) with `opportunities.readonly` + `locations/customFields.readonly` |
 | `GHL_LOCATION_ID` | `EY0n2rtraCf6EEUKpaEE` |
 | `GA4_PROPERTY_ID` | **GA4 property id** (numeric, from GA Admin → Property Settings). Note: this is *not* the account id 189270321. |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Entire service-account key JSON on one line; add the service-account email as **Viewer** on the GA4 property |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REFRESH_TOKEN` | **GA4 auth option A (no GA admin needed):** reads analytics as your own Google account — plain Viewer access is enough. See "Google Analytics auth" below. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | **GA4 auth option B:** entire service-account key JSON on one line; a GA **admin** must add the service-account email as Viewer on the property |
 | `OPENAI_API_KEY` | For the Social Media tab |
 | `OPENAI_MODEL` | Optional, default `gpt-4o-mini` |
 | `MOCK_MODE` | `true` = sample data (demo), `false` = live |
+
+## Google Analytics auth
+
+Two ways to connect GA4 — set the env vars for ONE of them (if both are set,
+OAuth wins):
+
+**Option A — OAuth as you (no GA admin required).** Works with the Viewer
+access you already have on the client's property.
+
+1. In Google Cloud → APIs & Services → Credentials → **Create Credentials →
+   OAuth client ID** → type **Web application**.
+2. Add the authorized redirect URI:
+   `https://YOUR-APP.onrender.com/auth/google/callback`
+   (add `http://localhost:10000/auth/google/callback` too if testing locally).
+   If asked to configure the consent screen first: External, add yourself as a
+   test user.
+3. Put the client id + secret in `GOOGLE_OAUTH_CLIENT_ID` /
+   `GOOGLE_OAUTH_CLIENT_SECRET` and deploy.
+4. Visit `https://YOUR-APP.onrender.com/auth/google`, sign in with the Google
+   account that can see the analytics, and copy the refresh token the page
+   shows into `GOOGLE_OAUTH_REFRESH_TOKEN`. Redeploy — done.
+
+Caveat: this is tied to your Google login; if your access to the property is
+removed, the Analytics tab stops working.
+
+**Option B — Service account.** Create a service account key in Google Cloud
+(IAM & Admin → Service Accounts → Keys → JSON), paste the whole JSON into
+`GOOGLE_SERVICE_ACCOUNT_JSON`, and have a GA **administrator** add the
+service-account email as Viewer under GA Admin → Property Access Management.
+
+Either way, enable the **Google Analytics Data API** on the Cloud project.
 
 ## API endpoints
 
