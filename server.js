@@ -47,8 +47,6 @@ const {
   PROMO_STAGE_NAME = "Upcoming Events",
   GA4_PROPERTY_ID = "",
   GOOGLE_SERVICE_ACCOUNT_JSON = "",
-  GOOGLE_OAUTH_CLIENT_ID = "",
-  GOOGLE_OAUTH_CLIENT_SECRET = "",
   GOOGLE_OAUTH_REFRESH_TOKEN = "",
   OPENAI_API_KEY,
   OPENAI_MODEL = "gpt-4o-mini",
@@ -57,6 +55,14 @@ const {
   MOCK_MODE = "false",
   PORT = 10000,
 } = process.env;
+
+// OAuth client id/secret: accept either the GOOGLE_OAUTH_* names or the
+// plain GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET names (e.g. from an existing
+// Render environment group).
+const GOOGLE_OAUTH_CLIENT_ID =
+  process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_OAUTH_CLIENT_SECRET =
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || "";
 
 const MOCK = String(MOCK_MODE).toLowerCase() === "true";
 const CACHE_MS = Math.max(30, parseInt(CACHE_SECONDS, 10) || 300) * 1000;
