@@ -394,12 +394,16 @@ function formatDateValue(v) {
     : String(v || "").trim();
 }
 
-async function resolvePromoScope() {
-  if (promoScope) return promoScope;
+async function getPipelines() {
   const data = await ghlGet(
     `/opportunities/pipelines?locationId=${encodeURIComponent(GHL_LOCATION_ID)}`
   );
-  const pipelines = data.pipelines || [];
+  return data.pipelines || [];
+}
+
+async function resolvePromoScope() {
+  if (promoScope) return promoScope;
+  const pipelines = await getPipelines();
   let pipeline = null;
   if (PROMO_PIPELINE_ID) {
     pipeline = pipelines.find((p) => p.id === PROMO_PIPELINE_ID) || { id: PROMO_PIPELINE_ID, stages: [] };
