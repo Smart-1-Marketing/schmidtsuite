@@ -1587,6 +1587,9 @@ app.post("/admin/api/products/style-description", requireAdmin, express.json(), 
             `the words for a different product. Keep any section headings the store uses (tasting notes, ` +
             `details, shipping and so on) when they make sense for the new product, and drop ones that don't. ` +
             `Never invent facts like vintages, ABV, awards, weights or allergens that you weren't given. ` +
+            `Boilerplate lines in the template — shipping included, pickup only, club pricing, ticket terms — ` +
+            `are claims about THAT product: keep one only if it plainly applies to the new product too, ` +
+            `otherwise leave it out rather than repeating it. ` +
             `Return only JSON: {"html":"..."} where html is the finished description body — no <html>, <head> ` +
             `or <body> wrapper, and no markdown fences.`,
         },
