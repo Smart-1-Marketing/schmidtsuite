@@ -45,6 +45,9 @@ const {
   PROMO_PIPELINE_NAME = "Schmidt Marketing Projects",
   PROMO_STAGE_ID = "",
   PROMO_STAGE_NAME = "Upcoming Events",
+  BRAND_NAME = "Schmidt's Sausage Haus",
+  SITE_URL = "schmidthaus.com",
+  PROMO_FORM_URL = "https://api.leadconnectorhq.com/widget/form/HiSs6ID0Yw8nu5ISjech",
   BANQUET_PIPELINE_NAME = "Banquet House Request",
   CATERING_PIPELINE_NAMES = "Catering Menu Request,Catering Requests",
   GA4_PROPERTY_ID = "",
@@ -170,15 +173,38 @@ async function ecwidWrite(method, endpoint, body) {
     headers: {
       Authorization: `Bearer ${ECWID_API_TOKEN}`,
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
-    body: JSON.stringify(body),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await resp.text().catch(() => "");
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   if (!resp.ok) {
     const err = new Error(`Ecwid API ${resp.status}: ${(data.errorMessage || text).slice(0, 300)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
+// Uploads raw image bytes straight to Ecwid (no multipart, no extra deps).
+// Ecwid takes the file as the request body: POST /products/{id}/image
+async function ecwidUploadImage(endpoint, buffer, contentType) {
+  const resp = await fetch(`${ECWID_BASE}${endpoint}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ECWID_API_TOKEN}`,
+      "Content-Type": contentType || "application/octet-stream",
+      "Content-Length": String(buffer.length),
+    },
+    body: buffer,
+  });
+  const text = await resp.text().catch(() => "");
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`Ecwid image upload ${resp.status}: ${(data.errorMessage || text).slice(0, 300)}`);
     err.status = resp.status;
     throw err;
   }
@@ -1259,10 +1285,11 @@ const safe = (fn) => async (req, res) => {
 };
 
 // ================================================================ ADMIN (owner-only)
-// Password-protected pages: add a product, toggle products on/off, and a
-// monthly sales + state/local tax report — all through the Ecwid API.
-// Enable by setting ADMIN_PASSWORD. There is no link to /admin from the
-// dashboard; share the URL only with people who should have it.
+// Owner tools — add/edit products (with photo upload), toggle products on and
+// off, discount codes, abandoned-cart recovery, and a monthly sales +
+// state/local tax report, all through the Ecwid API. These now live INSIDE
+// the main dashboard menu: the tabs appear once you sign in with
+// ADMIN_PASSWORD, and stay hidden otherwise.
 
 const ADMIN_SECRET = ADMIN_SESSION_SECRET || ADMIN_PASSWORD || "disabled";
 const ADMIN_COOKIE = "s1admin";
@@ -1293,10 +1320,9 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-app.get("/admin", (req, res) => {
-  if (!ADMIN_PASSWORD) return res.status(404).send("Not found");
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
+// The old standalone /admin page is gone — owner tools are tabs in the main
+// menu now. Keep the URL working for anyone with it bookmarked.
+app.get("/admin", (req, res) => res.redirect("/#adminProducts"));
 
 app.post("/admin/api/login", express.json(), (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(404).json({ error: "Admin area not enabled." });
@@ -1312,6 +1338,11 @@ app.post("/admin/api/login", express.json(), (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/admin/api/logout", (req, res) => {
+  res.setHeader("Set-Cookie", `${ADMIN_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  res.json({ ok: true });
+});
+
 app.get("/admin/api/session", (req, res) =>
   res.json({ signedIn: !!ADMIN_PASSWORD && isAdminRequest(req), enabled: !!ADMIN_PASSWORD, mock: MOCK }));
 
@@ -1320,7 +1351,7 @@ let mockProductList = null;
 function getMockProducts() {
   if (!mockProductList) {
     mockProductList = [
-      { id: 101, name: "Bahama Mama Sausages (4-pack)", sku: "BM-4PK", price: 24.0, enabled: true, quantity: 120, unlimited: false },
+      { id: 101, name: "Bahama Mama Sausages (4-pack)", sku: "BM-4PK", price: 24.0, enabled: true, quantity: 120, unlimited: false, weight: 2.5, description: "Our famous Bahama Mamas.", imageUrl: "" },
       { id: 102, name: "Jumbo Cream Puff Kit", sku: "CP-KIT", price: 29.0, enabled: true, quantity: 45, unlimited: false },
       { id: 103, name: "German Potato Salad (Family Size)", sku: "GPS-FAM", price: 19.0, enabled: true, quantity: 0, unlimited: true },
       { id: 104, name: "Sauerkraut Balls (Frozen, 24ct)", sku: "SKB-24", price: 18.0, enabled: false, quantity: 60, unlimited: false },
@@ -1338,6 +1369,8 @@ app.get("/admin/api/products", requireAdmin, safe(async () => {
     products: items.map((p) => ({
       id: p.id, name: p.name, sku: p.sku, price: p.price,
       enabled: p.enabled, quantity: p.quantity, unlimited: p.unlimited,
+      weight: p.weight, description: p.description || "",
+      imageUrl: p.thumbnailUrl || p.imageUrl || p.smallThumbnailUrl || "",
     })),
   };
 }));
@@ -1382,6 +1415,81 @@ app.post("/admin/api/products", requireAdmin, express.json(), safe(async (req) =
   const created = await ecwidWrite("POST", "/products", product);
   simpleCache.delete("ecwid");
   return { ok: true, product: { id: created.id, ...product } };
+}));
+
+// ---- Update an existing product ----
+// Only the fields actually sent are changed, so a blank box never wipes
+// something out by accident.
+app.put("/admin/api/products/:id", requireAdmin, express.json(), safe(async (req) => {
+  const id = req.params.id;
+  const b = req.body || {};
+  const update = {};
+  if (b.name !== undefined && String(b.name).trim() !== "") update.name = String(b.name).slice(0, 255);
+  if (b.price !== undefined && b.price !== "") update.price = Number(b.price);
+  if (b.sku !== undefined) update.sku = String(b.sku).slice(0, 64);
+  if (b.description !== undefined) update.description = String(b.description);
+  if (b.weight !== undefined && b.weight !== "") update.weight = Number(b.weight);
+  if (b.enabled !== undefined) update.enabled = !!b.enabled;
+  if (b.quantity !== undefined) {
+    if (b.quantity === "" || b.quantity === null) {
+      update.unlimited = true;
+    } else {
+      update.quantity = parseInt(b.quantity, 10);
+      update.unlimited = false;
+    }
+  }
+  if (!Object.keys(update).length)
+    throw Object.assign(new Error("Nothing to update."), { status: 400 });
+
+  if (MOCK) {
+    const p = getMockProducts().find((x) => String(x.id) === String(id));
+    if (!p) throw Object.assign(new Error("Product not found."), { status: 404 });
+    Object.assign(p, update);
+    return { ok: true, product: p, mock: true };
+  }
+  await ecwidWrite("PUT", `/products/${encodeURIComponent(id)}`, update);
+  simpleCache.delete("ecwid");
+  return { ok: true, id, updated: Object.keys(update) };
+}));
+
+// ---- Product photo upload ----
+// The browser posts the raw image bytes with the file's own content type;
+// we hand the same bytes to Ecwid. `?gallery=1` adds it to the gallery
+// instead of replacing the main photo.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const rawImage = express.raw({ type: () => true, limit: MAX_IMAGE_BYTES });
+
+app.post("/admin/api/products/:id/image", requireAdmin, rawImage, safe(async (req) => {
+  const id = req.params.id;
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || !buf.length)
+    throw Object.assign(new Error("No image data received."), { status: 400 });
+  const type = (req.headers["content-type"] || "").split(";")[0];
+  if (!/^image\//.test(type))
+    throw Object.assign(new Error(`Unsupported file type "${type || "unknown"}" — upload a JPG, PNG, GIF or WebP.`), { status: 400 });
+
+  const gallery = req.query.gallery === "1";
+  if (MOCK) {
+    const p = getMockProducts().find((x) => String(x.id) === String(id));
+    if (p && !gallery) p.imageUrl = `data:${type};base64,${buf.toString("base64")}`;
+    return { ok: true, mock: true, bytes: buf.length, gallery };
+  }
+  const out = await ecwidUploadImage(
+    `/products/${encodeURIComponent(id)}/${gallery ? "gallery" : "image"}`, buf, type);
+  simpleCache.delete("ecwid");
+  return { ok: true, bytes: buf.length, gallery, result: out };
+}));
+
+app.delete("/admin/api/products/:id/image", requireAdmin, safe(async (req) => {
+  const id = req.params.id;
+  if (MOCK) {
+    const p = getMockProducts().find((x) => String(x.id) === String(id));
+    if (p) p.imageUrl = "";
+    return { ok: true, mock: true };
+  }
+  await ecwidWrite("DELETE", `/products/${encodeURIComponent(id)}/image`, undefined);
+  simpleCache.delete("ecwid");
+  return { ok: true };
 }));
 
 // ---- Monthly sales + state/local tax breakdown ----
@@ -1758,6 +1866,17 @@ app.get("/admin/api/recovery-status", requireAdmin, (req, res) =>
 // ================================================================ ROUTES
 app.get("/health", (req, res) =>
   res.json({ status: "ok", mock: MOCK, timestamp: new Date().toISOString() })
+);
+
+app.get("/api/config", (req, res) =>
+  res.json({
+    brand: BRAND_NAME,
+    site: SITE_URL,
+    promoFormUrl: PROMO_FORM_URL,
+    adminEnabled: !!ADMIN_PASSWORD,
+    signedIn: !!ADMIN_PASSWORD && isAdminRequest(req),
+    mock: MOCK,
+  })
 );
 
 app.get("/api/ecwid", safe(() => getEcwidData()));

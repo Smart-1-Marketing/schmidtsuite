@@ -55,19 +55,27 @@ MOCK_MODE=true npm start
 | `OPENAI_MODEL` | Optional, default `gpt-4o-mini` |
 | `MOCK_MODE` | `true` = sample data (demo), `false` = live |
 
-## Admin area (owner only)
+## Owner Tools (in the main menu)
 
-`/admin` is a password-protected page with three tools, all working through the
-Ecwid API: **Add Product** (name, price, SKU, stock, weight, description,
-visible on/off), **Products On / Off** (searchable list with live toggles), and
-**Sales & Tax** (pick a month → orders, gross sales, and tax collected broken
-down by jurisdiction, classified State / Local from the tax names configured
-in Ecwid; counts PAID and partially-refunded orders).
+Set `ADMIN_PASSWORD` and an **Owner Tools** button appears in the dashboard
+header. Sign in once and four more tabs join the main navigation — they stay
+hidden for everyone else, and sign-in lasts 30 days per browser:
 
-Setup: set `ADMIN_PASSWORD` in Render (that's what enables the area — without
-it /admin 404s). Sign-in lasts 30 days per browser. There is no link to /admin
-from the dashboard; share the URL privately. IMPORTANT: adding/toggling
-products requires the Ecwid token to have **catalog write** access
+- **Products** — searchable list with photo thumbnails, live on/off switches,
+  and an **Edit** button on every row. One form both adds new products and
+  saves changes to existing ones, including **photo upload** (JPG, PNG, GIF,
+  WebP up to 10 MB) straight into Ecwid, plus photo removal.
+- **Discount Codes** — create Ecwid coupons (%, $, free shipping, combos, use
+  limits, start/expiry) and review existing ones.
+- **Abandoned Carts** — AI-drafted recovery emails, tone matched to cart age
+  (New / Warm / Cold), sent through Smart 1 Suite and tagged so no cart gets
+  the same-stage email twice.
+- **Sales & Tax** — pick a month → orders, gross sales, and tax collected
+  broken down by jurisdiction (State / Local), order detail, and a CSV export.
+
+The old standalone `/admin` page is gone; that URL now redirects into the
+dashboard. IMPORTANT: adding/editing products, uploading photos and creating
+coupons require the Ecwid token to have **catalog write** access
 (`create_catalog`, `update_catalog`) — a read-only token will list products
 but fail to change them.
 

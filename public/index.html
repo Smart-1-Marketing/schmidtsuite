@@ -222,6 +222,44 @@
     .modal-head h3 { margin: 0; color: var(--red); }
     .modal-body { flex: 1; overflow: hidden; }
     .modal-body iframe { width: 100%; height: 70vh; border: 0; display: block; }
+    /* ---------------- Owner Tools (admin tabs in the main menu) ---------------- */
+    .tab-sep {
+      width: 1px; align-self: stretch; background: var(--border); margin: 4px 6px;
+    }
+    .tab.admin-tab { color: var(--dark-red); }
+    .tab.admin-tab::before { content: "🔒 "; font-size: 11px; }
+    .tab.admin-tab.active::before { content: ""; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px; }
+    input[type=text], input[type=number], input[type=password], input[type=month],
+    textarea, select.field {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 8px; background: #fff;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+    .full { grid-column: 1 / -1; }
+    .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .msg { padding: 12px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; display: none; }
+    .msg.ok { background: #e8f5ed; color: var(--green); display: block; }
+    .msg.err { background: #fde8e8; color: var(--dark-red); display: block; }
+    .row-flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .search { flex: 1; min-width: 200px; }
+    .metric-grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; vertical-align: middle; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; inset: 0; background: #ccc; border-radius: 26px; transition: 0.2s; }
+    .slider:before {
+      content: ""; position: absolute; height: 20px; width: 20px; left: 3px; top: 3px;
+      background: #fff; border-radius: 50%; transition: 0.2s;
+    }
+    .switch input:checked + .slider { background: var(--green); }
+    .switch input:checked + .slider:before { transform: translateX(20px); }
+    .switch input:disabled + .slider { opacity: 0.5; cursor: wait; }
+    .modal-box.small { max-width: 420px; }
+    .modal-pad { padding: 20px; }
+    @media (max-width: 700px) {
+      .form-grid, .metric-grid-3 { grid-template-columns: 1fr; }
+    }
     @media (max-width: 1050px) {
       .metric-grid { grid-template-columns: repeat(2, 1fr); }
       .three-column { grid-template-columns: 1fr; }
@@ -259,6 +297,7 @@
           <button class="btn period-btn" data-period="ytd">This Year</button>
         </div>
         <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
+        <button class="btn" id="ownerBtn" style="display:none;">Owner Tools</button>
       </div>
     </header>
 
@@ -276,6 +315,12 @@
       <button class="tab" data-tab="calendar">Campaign Calendar</button>
       <button class="tab" data-tab="social">Social Media</button>
       <button class="tab" data-tab="review">Review<span class="count" id="reviewCount" style="display:none;">0</span></button>
+      <!-- Owner Tools — visible in this same menu once signed in -->
+      <span class="tab-sep" id="adminSep" style="display:none;"></span>
+      <button class="tab admin-tab" data-tab="adminProducts" style="display:none;">Products</button>
+      <button class="tab admin-tab" data-tab="adminDiscounts" style="display:none;">Discount Codes</button>
+      <button class="tab admin-tab" data-tab="adminCarts" style="display:none;">Abandoned Carts</button>
+      <button class="tab admin-tab" data-tab="adminSales" style="display:none;">Sales &amp; Tax</button>
     </nav>
 
     <!-- ================================================= -->
@@ -639,6 +684,268 @@
       </div>
     </section>
 
+
+    <!-- ================================================= -->
+    <!-- OWNER TOOLS — PRODUCTS (on/off + add)             -->
+    <!-- ================================================= -->
+    <section id="adminProducts" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Products</h2>
+          <div class="section-note">Switch store products on and off, or add new products to Ecwid</div>
+        </div>
+        <span class="badge badge-gold">Owner Tools</span>
+      </div>
+
+      <div class="card">
+        <div class="row-flex" style="margin-bottom:14px;">
+          <h3 style="margin:0;flex:1;">Turn Products On / Off</h3>
+          <input type="text" class="search" id="prodSearch" placeholder="Search by name or SKU…" />
+          <button class="btn" id="prodReload">Reload</button>
+        </div>
+        <div class="msg" id="toggleMsg"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>Status</th><th>On / Off</th><th></th></tr>
+            </thead>
+            <tbody id="prodBody">
+              <tr><td colspan="8" class="empty-note">Loading products…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="productFormCard">
+        <h3 id="productFormTitle">Add a Product to the Store</h3>
+        <div class="form-grid">
+          <div class="full">
+            <label>Product Name *</label>
+            <input type="text" id="pName" placeholder="e.g. Oktoberfest Party Platter" />
+          </div>
+          <div>
+            <label>Price (USD) *</label>
+            <input type="number" id="pPrice" min="0" step="0.01" placeholder="24.99" />
+          </div>
+          <div>
+            <label>SKU</label>
+            <input type="text" id="pSku" placeholder="Optional" />
+          </div>
+          <div>
+            <label>Stock Quantity</label>
+            <input type="number" id="pQty" min="0" step="1" placeholder="Leave blank = unlimited" />
+          </div>
+          <div>
+            <label>Weight (lbs)</label>
+            <input type="number" id="pWeight" min="0" step="0.01" placeholder="Optional — for shipping" />
+          </div>
+          <div class="full">
+            <label>Description</label>
+            <textarea id="pDesc" placeholder="Shown on the product page"></textarea>
+          </div>
+          <div class="full">
+            <label>Product Photo</label>
+            <div class="row-flex">
+              <img id="pImgPreview" alt="" style="display:none;width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" />
+              <input type="file" id="pImage" accept="image/*" style="flex:1;min-width:220px;" />
+              <button class="btn" id="pImgClear" type="button" style="display:none;">Clear</button>
+            </div>
+            <p class="note">JPG, PNG, GIF or WebP up to 10 MB. Uploading replaces the product's main photo in Ecwid.</p>
+          </div>
+          <div class="full">
+            <label style="display:flex;align-items:center;gap:10px;margin-top:15px;">
+              <span class="switch"><input type="checkbox" id="pEnabled" checked /><span class="slider"></span></span>
+              Visible in the store immediately
+            </label>
+          </div>
+        </div>
+        <div class="msg" id="addMsg"></div>
+        <div class="row-flex" style="margin-top:18px;">
+          <button class="btn btn-primary" id="addBtn">Add Product to Ecwid</button>
+          <button class="btn" id="cancelEditBtn" style="display:none;">Cancel Edit</button>
+        </div>
+        <p class="note">Writes straight to the live Ecwid store. Shipping rules and taxes stay in Ecwid.</p>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- OWNER TOOLS — DISCOUNT CODES                      -->
+    <!-- ================================================= -->
+    <section id="adminDiscounts" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Discount Codes</h2>
+          <div class="section-note">Create and review Ecwid coupon codes for promotions</div>
+        </div>
+        <span class="badge badge-gold">Owner Tools</span>
+      </div>
+      <div class="card">
+        <h3>Create a Discount Code</h3>
+        <div class="form-grid">
+          <div>
+            <label>Code *</label>
+            <input type="text" id="cCode" placeholder="e.g. OKTOBER10" style="text-transform:uppercase;" />
+          </div>
+          <div>
+            <label>Name / Campaign *</label>
+            <input type="text" id="cName" placeholder="e.g. Oktoberfest Promo" />
+          </div>
+          <div>
+            <label>Discount Type</label>
+            <select id="cType" class="field">
+              <option value="PERCENT">% off order</option>
+              <option value="ABS">$ off order</option>
+              <option value="SHIPPING">Free shipping</option>
+              <option value="PERCENT_AND_SHIPPING">% off + free shipping</option>
+              <option value="ABS_AND_SHIPPING">$ off + free shipping</option>
+            </select>
+          </div>
+          <div>
+            <label>Amount</label>
+            <input type="number" id="cAmount" min="0" step="0.01" placeholder="15" />
+          </div>
+          <div>
+            <label>Uses Limit</label>
+            <select id="cUses" class="field">
+              <option value="UNLIMITED">Unlimited</option>
+              <option value="ONE_PER_CUSTOMER">One per customer</option>
+              <option value="SINGLE">Single use total</option>
+            </select>
+          </div>
+          <div>
+            <label>Repeat Customers Only</label>
+            <label style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+              <span class="switch"><input type="checkbox" id="cRepeat" /><span class="slider"></span></span>
+              <span class="note" style="margin:0;">Only customers with a prior order can use it</span>
+            </label>
+          </div>
+          <div>
+            <label>Starts (optional)</label>
+            <input type="text" id="cLaunch" placeholder="YYYY-MM-DD" />
+          </div>
+          <div>
+            <label>Expires (optional)</label>
+            <input type="text" id="cExpire" placeholder="YYYY-MM-DD" />
+          </div>
+        </div>
+        <div class="msg" id="couponMsg"></div>
+        <div style="margin-top:18px;">
+          <button class="btn btn-primary" id="couponAddBtn">Create Discount Code in Ecwid</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row-flex" style="margin-bottom:14px;">
+          <h3 style="margin:0;flex:1;">Existing Codes</h3>
+          <button class="btn" id="couponReload">Reload</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Name</th><th>Discount</th><th>Status</th><th>Limit</th><th>Uses</th><th>Expires</th></tr></thead>
+            <tbody id="couponBody"><tr><td colspan="7" class="empty-note">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- OWNER TOOLS — ABANDONED CARTS                     -->
+    <!-- ================================================= -->
+    <section id="adminCarts" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Abandoned Carts</h2>
+          <div class="section-note">Recover unfinished online orders with an AI-drafted email sent through Smart 1 Suite</div>
+        </div>
+        <span class="badge badge-gold">Owner Tools</span>
+      </div>
+      <div class="card">
+        <div class="row-flex" style="margin-bottom:6px;">
+          <h3 style="margin:0;flex:1;">Carts &amp; Recovery Emails</h3>
+          <label style="margin:0;">Include discount code:</label>
+          <select id="abCoupon" class="field" style="width:auto;">
+            <option value="">No discount</option>
+          </select>
+          <button class="btn" id="abReload">Reload</button>
+        </div>
+        <p class="note">Drafts a recovery email for each cart — tone matched to its age — and sends it through Smart 1 Suite. New = under 2 days (gentle reminder), Warm = 2–6 days (sweeten the deal), Cold = 7+ days (last chance).</p>
+        <p class="note" id="autoStatus"></p>
+        <div class="msg" id="abMsg"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Customer</th><th>Cart</th><th>Value</th><th>Age</th><th>Status</th><th></th></tr></thead>
+            <tbody id="abBody"><tr><td colspan="6" class="empty-note">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="draftCard" style="display:none;">
+        <h3>Drafted Email — <span id="draftFor"></span></h3>
+        <label>Subject</label>
+        <input type="text" id="draftSubject" />
+        <label>Body</label>
+        <textarea id="draftBody" style="min-height:220px;"></textarea>
+        <p class="note" id="draftMeta"></p>
+        <div class="msg" id="sendMsg"></div>
+        <div class="row-flex" style="margin-top:12px;">
+          <button class="btn btn-primary" id="draftSend">Send via Smart 1 Suite</button>
+          <button class="btn" id="draftMailto">Open in Email App</button>
+          <button class="btn" id="draftCopy">Copy Email Text</button>
+        </div>
+        <p class="note">"Send via Smart 1 Suite" delivers the email through GoHighLevel (it appears in the contact's conversation history) and tags the contact so the same cart never gets the same-stage email twice.</p>
+      </div>
+    </section>
+
+    <!-- ================================================= -->
+    <!-- OWNER TOOLS — SALES & TAX                         -->
+    <!-- ================================================= -->
+    <section id="adminSales" class="panel">
+      <div class="section-header">
+        <div>
+          <h2>Sales &amp; Tax</h2>
+          <div class="section-note">Monthly online sales with state and local tax collected, ready for the bookkeeper</div>
+        </div>
+        <span class="badge badge-gold">Owner Tools</span>
+      </div>
+      <div class="card">
+        <div class="row-flex" style="margin-bottom:6px;">
+          <h3 style="margin:0;flex:1;">Monthly Sales &amp; Tax Report</h3>
+          <input type="month" id="taxMonth" style="width:auto;" />
+          <button class="btn btn-primary" id="taxRun">Run Report</button>
+          <button class="btn" id="taxCsv" style="display:none;">⬇ Download CSV</button>
+        </div>
+        <p class="note">Counts PAID (and partially refunded) Ecwid orders in the month. Tax lines come from each order's itemized taxes, grouped by the tax names configured in Ecwid. Online orders only — in-store POS sales are not in Ecwid.</p>
+        <div class="msg" id="taxMsg"></div>
+      </div>
+      <div id="taxResults" style="display:none;">
+        <div class="metric-grid metric-grid-3">
+          <div class="metric-card"><div class="metric-label">Orders</div><div class="metric-value" id="txOrders">—</div></div>
+          <div class="metric-card"><div class="metric-label">Gross Sales</div><div class="metric-value" id="txGross">—</div></div>
+          <div class="metric-card"><div class="metric-label">Total Tax Collected</div><div class="metric-value" id="txTax">—</div></div>
+          <div class="metric-card"><div class="metric-label">Subtotal (pre-tax)</div><div class="metric-value" id="txSub">—</div></div>
+          <div class="metric-card"><div class="metric-label">Shipping</div><div class="metric-value" id="txShip">—</div></div>
+          <div class="metric-card"><div class="metric-label">Discounts</div><div class="metric-value" id="txDisc">—</div></div>
+        </div>
+        <div class="card">
+          <h3>Tax Breakdown — <span id="txMonthLabel"></span></h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tax / Jurisdiction</th><th>Type</th><th>Orders</th><th>Amount</th></tr></thead>
+              <tbody id="taxBody"></tbody>
+            </table>
+          </div>
+          <p class="note" id="txStatusNote"></p>
+        </div>
+        <div class="card">
+          <h3>Order Detail — <span id="txMonthLabel2"></span></h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Subtotal</th><th>Shipping</th><th>Discount</th><th>Tax</th><th>Total</th><th>Status</th></tr></thead>
+              <tbody id="orderRowsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="footer">
       Schmidt's Marketing Hot Sheet • Internal Marketing Dashboard •
       <span id="lastUpdated"></span>
@@ -656,6 +963,23 @@
     </div>
   </div>
 
+
+  <!-- Owner Tools sign-in -->
+  <div class="modal-overlay" id="adminModal">
+    <div class="modal-box small">
+      <div class="modal-head">
+        <h3>Owner Tools</h3>
+        <button class="btn" id="adminModalClose">✕ Close</button>
+      </div>
+      <div class="modal-pad">
+        <p class="note" style="margin-top:0;">Products, discount codes, cart recovery and the sales &amp; tax report. Signing in keeps you signed in on this browser for 30 days.</p>
+        <label for="adminPw">Password</label>
+        <input type="password" id="adminPw" autocomplete="current-password" />
+        <div class="msg" id="adminMsg"></div>
+        <button class="btn btn-primary" id="adminSignInBtn" style="width:100%;margin-top:14px;">Sign In</button>
+      </div>
+    </div>
+  </div>
   <script>
     // ------------------------------------------------ tab handling
     const tabs = document.querySelectorAll(".tab");
@@ -1182,7 +1506,7 @@
     );
 
     // ------------------------------------------------ Submit a New Promotion modal
-    const PROMO_FORM_URL = "https://api.leadconnectorhq.com/widget/form/HiSs6ID0Yw8nu5ISjech";
+    let PROMO_FORM_URL = "https://api.leadconnectorhq.com/widget/form/HiSs6ID0Yw8nu5ISjech";
     $("newPromoBtn").addEventListener("click", () => {
       $("promoModalBody").innerHTML =
         `<iframe src="${PROMO_FORM_URL}" title="Submit a New Promotion" allow="clipboard-write"></iframe>`;
@@ -1217,6 +1541,557 @@
       btn.disabled = false;
       btn.textContent = "Get Fresh Ideas";
     });
+
+
+    // ============================================================
+    // OWNER TOOLS — products, discount codes, cart recovery, sales tax.
+    // These tabs live in the main menu but only appear after signing in
+    // with ADMIN_PASSWORD; everything below talks to /admin/api/*, which
+    // rejects anything without a valid session cookie.
+    // ============================================================
+    let ADMIN_READY = false;   // data for the owner tabs has been loaded once
+
+    function showMsg(id, text, ok) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = "msg " + (ok ? "ok" : "err");
+      if (ok) setTimeout(() => { el.className = "msg"; }, 6000);
+    }
+
+    async function adminApi(path, opts) {
+      const resp = await fetch(path, { credentials: "same-origin", ...opts });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.status === 401) { setSignedIn(false); openAdminModal(); throw new Error("Signed out"); }
+      if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+      return data;
+    }
+
+    // ---------------- sign in / out ----------------
+    function setSignedIn(on) {
+      document.querySelectorAll(".admin-tab, #adminSep").forEach((el) => {
+        el.style.display = on ? "" : "none";
+      });
+      $("ownerBtn").textContent = on ? "Sign Out of Owner Tools" : "Owner Tools";
+      if (!on) {
+        ADMIN_READY = false;
+        // never leave an owner panel on screen after signing out
+        if (document.querySelector(".admin-tab.active")) showTab("overview");
+      }
+    }
+    function openAdminModal() {
+      $("adminMsg").className = "msg";
+      $("adminPw").value = "";
+      $("adminModal").classList.add("open");
+      setTimeout(() => $("adminPw").focus(), 50);
+    }
+    function closeAdminModal() { $("adminModal").classList.remove("open"); }
+
+    async function adminSignIn() {
+      const btn = $("adminSignInBtn");
+      btn.disabled = true;
+      try {
+        await adminApi("/admin/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: $("adminPw").value }),
+        });
+        closeAdminModal();
+        setSignedIn(true);
+        loadAdminData();
+        showTab("adminProducts");
+      } catch (e) {
+        showMsg("adminMsg", e.message === "Signed out" ? "Wrong password." : e.message, false);
+      }
+      btn.disabled = false;
+    }
+
+    async function adminSignOut() {
+      try { await fetch("/admin/api/logout", { method: "POST", credentials: "same-origin" }); } catch {}
+      setSignedIn(false);
+    }
+
+    function loadAdminData() {
+      if (ADMIN_READY) return;
+      ADMIN_READY = true;
+      loadProducts();
+      loadCoupons();
+      loadAbandoned();
+      loadRecoveryStatus();
+    }
+
+    // ---------------- add / edit a product ----------------
+    // One form does both jobs: EDIT_ID is null when adding, set when editing.
+    let EDIT_ID = null;
+
+    function productFormValues() {
+      return {
+        name: $("pName").value.trim(),
+        price: $("pPrice").value,
+        sku: $("pSku").value.trim(),
+        quantity: $("pQty").value,
+        weight: $("pWeight").value,
+        description: $("pDesc").value.trim(),
+        enabled: $("pEnabled").checked,
+      };
+    }
+
+    function resetProductForm() {
+      EDIT_ID = null;
+      ["pName", "pPrice", "pSku", "pQty", "pWeight", "pDesc"].forEach((id) => ($(id).value = ""));
+      $("pEnabled").checked = true;
+      $("pImage").value = "";
+      $("pImgPreview").style.display = "none";
+      $("pImgPreview").removeAttribute("src");
+      $("pImgClear").style.display = "none";
+      $("productFormTitle").textContent = "Add a Product to the Store";
+      $("addBtn").textContent = "Add Product to Ecwid";
+      $("cancelEditBtn").style.display = "none";
+    }
+
+    function editProduct(id) {
+      const p = PRODUCTS.find((x) => String(x.id) === String(id));
+      if (!p) return;
+      EDIT_ID = p.id;
+      $("pName").value = p.name || "";
+      $("pPrice").value = p.price ?? "";
+      $("pSku").value = p.sku || "";
+      $("pQty").value = p.unlimited ? "" : (p.quantity ?? "");
+      $("pWeight").value = p.weight ?? "";
+      $("pDesc").value = (p.description || "").replace(/<[^>]*>/g, "").trim();
+      $("pEnabled").checked = !!p.enabled;
+      $("pImage").value = "";
+      if (p.imageUrl) {
+        $("pImgPreview").src = p.imageUrl;
+        $("pImgPreview").style.display = "";
+        $("pImgClear").style.display = "";
+      } else {
+        $("pImgPreview").style.display = "none";
+        $("pImgClear").style.display = "none";
+      }
+      $("productFormTitle").textContent = `Edit Product — ${p.name}`;
+      $("addBtn").textContent = "Save Changes";
+      $("cancelEditBtn").style.display = "";
+      $("addMsg").className = "msg";
+      $("productFormCard").scrollIntoView({ behavior: "smooth" });
+    }
+    window.editProduct = editProduct;
+    $("cancelEditBtn").addEventListener("click", resetProductForm);
+
+    // preview a newly chosen file before it is uploaded
+    $("pImage").addEventListener("change", () => {
+      const f = $("pImage").files[0];
+      if (!f) return;
+      $("pImgPreview").src = URL.createObjectURL(f);
+      $("pImgPreview").style.display = "";
+      $("pImgClear").style.display = "";
+    });
+    $("pImgClear").addEventListener("click", async () => {
+      // With a file staged, just drop it. Otherwise remove the live photo.
+      if ($("pImage").files.length) {
+        $("pImage").value = "";
+        $("pImgPreview").style.display = "none";
+        $("pImgClear").style.display = EDIT_ID ? "" : "none";
+        return;
+      }
+      if (!EDIT_ID) return;
+      if (!confirm("Remove this product's photo from the store?")) return;
+      try {
+        await adminApi(`/admin/api/products/${encodeURIComponent(EDIT_ID)}/image`, { method: "DELETE" });
+        $("pImgPreview").style.display = "none";
+        $("pImgClear").style.display = "none";
+        showMsg("addMsg", "Photo removed.", true);
+        loadProducts();
+      } catch (e) { showMsg("addMsg", e.message, false); }
+    });
+
+    async function uploadProductImage(productId) {
+      const file = $("pImage").files[0];
+      if (!file) return null;
+      if (file.size > 10 * 1024 * 1024) throw new Error("That image is over 10 MB — please shrink it first.");
+      await adminApi(`/admin/api/products/${encodeURIComponent(productId)}/image`, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      return file.name;
+    }
+
+    $("addBtn").addEventListener("click", async () => {
+      const btn = $("addBtn");
+      const saving = !!EDIT_ID;
+      btn.disabled = true;
+      btn.textContent = saving ? "Saving…" : "Adding…";
+      try {
+        const body = productFormValues();
+        if (!body.name || body.price === "") throw new Error("Name and price are required.");
+
+        let id, out;
+        if (saving) {
+          out = await adminApi(`/admin/api/products/${encodeURIComponent(EDIT_ID)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          id = EDIT_ID;
+        } else {
+          out = await adminApi("/admin/api/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          id = out.product.id;
+        }
+
+        let photoNote = "";
+        try {
+          const uploaded = await uploadProductImage(id);
+          if (uploaded) photoNote = ` Photo "${uploaded}" uploaded.`;
+        } catch (imgErr) {
+          photoNote = ` (Saved, but the photo failed: ${imgErr.message})`;
+        }
+
+        showMsg("addMsg",
+          saving
+            ? `"${body.name}" updated${out.mock ? " (sample mode)" : " in Ecwid"}.${photoNote}`
+            : `"${body.name}" added${out.mock ? " (sample mode)" : " to Ecwid"} — id ${id}.${photoNote}`,
+          true);
+        resetProductForm();
+        loadProducts();
+      } catch (e) {
+        showMsg("addMsg", e.message, false);
+        btn.textContent = saving ? "Save Changes" : "Add Product to Ecwid";
+      }
+      btn.disabled = false;
+      if (!EDIT_ID) btn.textContent = "Add Product to Ecwid";
+    });
+
+    // ---------------- products on / off ----------------
+    let PRODUCTS = [];
+    async function loadProducts() {
+      try {
+        const data = await adminApi("/admin/api/products");
+        PRODUCTS = data.products || [];
+        renderProducts();
+      } catch (e) {
+        $("prodBody").innerHTML = `<tr><td colspan="6" style="color:var(--red);">${esc(e.message)}</td></tr>`;
+      }
+    }
+    function renderProducts() {
+      const q = $("prodSearch").value.trim().toLowerCase();
+      const list = PRODUCTS.filter((p) =>
+        !q || (p.name || "").toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q));
+      $("prodBody").innerHTML = list.length ? list.map((p) => `
+        <tr>
+          <td>${p.imageUrl
+            ? `<img src="${esc(p.imageUrl)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />`
+            : '<span class="note" style="margin:0;">no photo</span>'}</td>
+          <td>${esc(p.name)}</td>
+          <td>${esc(p.sku || "—")}</td>
+          <td>${money2(p.price)}</td>
+          <td>${p.unlimited ? "∞" : (p.quantity ?? "—")}</td>
+          <td>${p.enabled ? '<span class="badge badge-green">Live</span>' : '<span class="badge badge-red">Hidden</span>'}</td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" ${p.enabled ? "checked" : ""} data-id="${p.id}" onchange="toggleProduct(this)" />
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td><button class="btn" onclick="editProduct('${esc(String(p.id))}')">Edit</button></td>
+        </tr>`).join("")
+        : '<tr><td colspan="8" class="empty-note">No products match.</td></tr>';
+    }
+    async function toggleProduct(input) {
+      const id = input.dataset.id;
+      const enabled = input.checked;
+      input.disabled = true;
+      try {
+        await adminApi(`/admin/api/products/${encodeURIComponent(id)}/enabled`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        const p = PRODUCTS.find((x) => String(x.id) === String(id));
+        if (p) p.enabled = enabled;
+        showMsg("toggleMsg", `${p ? p.name : "Product"} is now ${enabled ? "LIVE in the store" : "hidden from the store"}.`, true);
+        renderProducts();
+      } catch (e) {
+        input.checked = !enabled;
+        showMsg("toggleMsg", e.message, false);
+      }
+      input.disabled = false;
+    }
+    window.toggleProduct = toggleProduct;
+    $("prodSearch").addEventListener("input", renderProducts);
+    $("prodReload").addEventListener("click", loadProducts);
+
+    // ---------------- discount codes ----------------
+    const discText = (c) =>
+      c.discountType === "SHIPPING" ? "Free shipping"
+      : c.discountType === "PERCENT" ? c.discount + "% off"
+      : c.discountType === "ABS" ? money2(c.discount) + " off"
+      : c.discountType === "PERCENT_AND_SHIPPING" ? c.discount + "% + free ship"
+      : money2(c.discount) + " + free ship";
+
+    async function loadCoupons() {
+      try {
+        const data = await adminApi("/admin/api/coupons");
+        const coupons = data.coupons || [];
+        const statusBadge = { ACTIVE: "badge-green", PAUSED: "badge-gold", EXPIRED: "badge-red", USEDUP: "badge-red" };
+        $("couponBody").innerHTML = coupons.length ? coupons.map((c) => `
+          <tr>
+            <td><strong>${esc(c.code)}</strong></td>
+            <td>${esc(c.name || "—")}</td>
+            <td>${discText(c)}</td>
+            <td><span class="badge ${statusBadge[c.status] || "badge-gold"}">${esc(c.status || "—")}</span></td>
+            <td>${esc((c.usesLimit || "UNLIMITED").replace(/_/g, " ").toLowerCase())}</td>
+            <td>${c.orderCount ?? 0}</td>
+            <td>${esc((c.expirationDate || "—").split(" ")[0])}</td>
+          </tr>`).join("")
+          : '<tr><td colspan="7" class="empty-note">No discount codes yet.</td></tr>';
+        // feed the abandoned-cart coupon picker with the active codes
+        const sel = $("abCoupon");
+        const keep = sel.value;
+        sel.innerHTML = '<option value="">No discount</option>' +
+          coupons.filter((c) => c.status === "ACTIVE").map((c) =>
+            `<option value="${esc(c.code)}">${esc(c.code)} (${discText(c)})</option>`).join("");
+        sel.value = keep;
+      } catch (e) {
+        $("couponBody").innerHTML = `<tr><td colspan="7" style="color:var(--red);">${esc(e.message)}</td></tr>`;
+      }
+    }
+    $("couponReload").addEventListener("click", loadCoupons);
+    $("couponAddBtn").addEventListener("click", async () => {
+      const btn = $("couponAddBtn");
+      btn.disabled = true;
+      try {
+        const body = {
+          code: $("cCode").value.trim().toUpperCase(),
+          name: $("cName").value.trim(),
+          discountType: $("cType").value,
+          discount: $("cAmount").value,
+          usesLimit: $("cUses").value,
+          repeatCustomerOnly: $("cRepeat").checked,
+          launchDate: $("cLaunch").value.trim(),
+          expirationDate: $("cExpire").value.trim(),
+        };
+        if (!body.code || !body.name) throw new Error("Code and name are required.");
+        if (body.discountType !== "SHIPPING" && (!body.discount || Number(body.discount) <= 0))
+          throw new Error("Enter a discount amount.");
+        const out = await adminApi("/admin/api/coupons", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        showMsg("couponMsg", `Code ${out.coupon.code} created${out.mock ? " (sample mode)" : " in Ecwid"}.`, true);
+        ["cCode", "cName", "cAmount", "cLaunch", "cExpire"].forEach((id) => ($(id).value = ""));
+        $("cRepeat").checked = false;
+        loadCoupons();
+      } catch (e) { showMsg("couponMsg", e.message, false); }
+      btn.disabled = false;
+    });
+
+    // ---------------- abandoned carts ----------------
+    let DRAFT_EMAIL_TO = "";
+    let DRAFT_CART_ID = "";
+    let AB_CARTS = [];
+
+    async function loadRecoveryStatus() {
+      try {
+        const s = await adminApi("/admin/api/recovery-status");
+        $("autoStatus").innerHTML = s.auto
+          ? `🤖 <strong>Automatic recovery is ON</strong> — every 6 hours, each cart gets the stage-appropriate email through Smart 1 Suite${s.coupon ? ` (Warm/Cold emails include code ${esc(s.coupon)})` : ""}. Contacts are tagged so no cart gets the same email twice.`
+          : "Automatic recovery is off — emails send only when you click. To make it hands-off, set AUTO_RECOVERY=true in Render (and optionally AUTO_RECOVERY_COUPON=CODE).";
+      } catch {}
+    }
+
+    async function loadAbandoned() {
+      try {
+        const data = await adminApi("/admin/api/abandoned");
+        AB_CARTS = data.carts || [];
+        const tierBadge = { New: "badge-green", Warm: "badge-gold", Cold: "badge-red" };
+        $("abBody").innerHTML = AB_CARTS.length ? AB_CARTS.map((c) => `
+          <tr>
+            <td>${esc(c.name || "—")}<div class="note" style="margin:2px 0 0;">${esc(c.email || "no email captured")}</div></td>
+            <td>${esc((c.items || []).map((i) => i.quantity + "x " + i.name).join(", "))}</td>
+            <td>${money2(c.total)}</td>
+            <td>${c.daysOld} day${c.daysOld === 1 ? "" : "s"}</td>
+            <td><span class="badge ${tierBadge[c.tier] || "badge-gold"}">${esc(c.tier)}</span></td>
+            <td>${c.email
+              ? `<button class="btn" onclick="draftEmail('${esc(String(c.cartId))}', this)">Draft Email</button>`
+              : '<span class="note">no email</span>'}</td>
+          </tr>`).join("")
+          : '<tr><td colspan="6" class="empty-note">No abandoned carts right now. 🎉</td></tr>';
+      } catch (e) {
+        $("abBody").innerHTML = `<tr><td colspan="6" style="color:var(--red);">${esc(e.message)}</td></tr>`;
+      }
+    }
+    $("abReload").addEventListener("click", loadAbandoned);
+
+    async function draftEmail(cartId, btn) {
+      btn.disabled = true;
+      btn.textContent = "Drafting…";
+      try {
+        const d = await adminApi("/admin/api/abandoned/draft", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cartId, couponCode: $("abCoupon").value || undefined }),
+        });
+        const cart = AB_CARTS.find((c) => String(c.cartId) === String(cartId)) || {};
+        DRAFT_EMAIL_TO = cart.email || "";
+        DRAFT_CART_ID = cartId;
+        $("sendMsg").className = "msg";
+        $("draftCard").style.display = "block";
+        $("draftFor").textContent = `${cart.name || cart.email} (${d.tier}, ${d.daysOld} day${d.daysOld === 1 ? "" : "s"} old)`;
+        $("draftSubject").value = d.subject;
+        $("draftBody").value = d.body;
+        $("draftMeta").textContent = d.generatedBy === "template"
+          ? "Written from the built-in template (AI unavailable). Edit freely before sending."
+          : `Written by AI (${d.generatedBy}). Edit freely before sending.`;
+        $("draftCard").scrollIntoView({ behavior: "smooth" });
+      } catch (e) { showMsg("abMsg", e.message, false); }
+      btn.disabled = false;
+      btn.textContent = "Draft Email";
+    }
+    window.draftEmail = draftEmail;
+
+    $("draftSend").addEventListener("click", async function () {
+      this.disabled = true;
+      this.textContent = "Sending…";
+      try {
+        const out = await adminApi("/admin/api/abandoned/send", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cartId: DRAFT_CART_ID, subject: $("draftSubject").value, body: $("draftBody").value }),
+        });
+        showMsg("sendMsg", out.message, out.ok);
+      } catch (e) { showMsg("sendMsg", e.message, false); }
+      this.disabled = false;
+      this.textContent = "Send via Smart 1 Suite";
+    });
+    $("draftMailto").addEventListener("click", () => {
+      location.href = `mailto:${encodeURIComponent(DRAFT_EMAIL_TO)}?subject=${encodeURIComponent($("draftSubject").value)}&body=${encodeURIComponent($("draftBody").value)}`;
+    });
+    $("draftCopy").addEventListener("click", function () {
+      navigator.clipboard.writeText(`Subject: ${$("draftSubject").value}\n\n${$("draftBody").value}`)
+        .then(() => { this.textContent = "Copied!"; setTimeout(() => (this.textContent = "Copy Email Text"), 1500); });
+    });
+
+    // ---------------- sales & tax ----------------
+    (function initMonth() {
+      const now = new Date();
+      $("taxMonth").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    })();
+
+    let LAST_REPORT = null;
+    $("taxRun").addEventListener("click", async () => {
+      const btn = $("taxRun");
+      btn.disabled = true;
+      $("taxMsg").className = "msg";
+      try {
+        const d = await adminApi(`/admin/api/sales?month=${encodeURIComponent($("taxMonth").value)}`);
+        $("taxResults").style.display = "block";
+        $("txMonthLabel").textContent = d.month;
+        $("txOrders").textContent = d.orders;
+        $("txGross").textContent = money2(d.grossSales);
+        $("txTax").textContent = money2(d.totalTax);
+        $("txSub").textContent = money2(d.subtotal);
+        $("txShip").textContent = money2(d.shipping);
+        $("txDisc").textContent = money2(d.discounts);
+        const typeBadge = { State: "badge-blue", Local: "badge-gold", Other: "badge-red" };
+        $("taxBody").innerHTML = (d.taxes || []).length ? d.taxes.map((t) => `
+          <tr>
+            <td>${esc(t.name)}</td>
+            <td><span class="badge ${typeBadge[t.type] || "badge-red"}">${esc(t.type)}</span></td>
+            <td>${t.orders}</td>
+            <td><strong>${money2(t.amount)}</strong></td>
+          </tr>`).join("")
+          : '<tr><td colspan="4" class="empty-note">No itemized tax lines found on this month\'s orders.</td></tr>';
+        const counted = Object.entries(d.counted || {}).map(([k, v]) => `${v} ${k}`).join(", ");
+        const excluded = Object.entries(d.excluded || {}).map(([k, v]) => `${v} ${k}`).join(", ");
+        $("txStatusNote").textContent =
+          `Counted: ${counted || "none"}.` + (excluded ? ` Not counted: ${excluded}.` : "");
+
+        $("txMonthLabel2").textContent = d.month;
+        const fmtD = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        $("orderRowsBody").innerHTML = (d.orderRows || []).length ? d.orderRows.map((r) => `
+          <tr>
+            <td><strong>${esc(r.order)}</strong></td>
+            <td>${fmtD(r.date)}</td>
+            <td>${esc(r.customer)}</td>
+            <td>${money2(r.subtotal)}</td>
+            <td>${money2(r.shipping)}</td>
+            <td>${r.discount ? "−" + money2(r.discount) : "—"}</td>
+            <td>${money2(r.tax)}</td>
+            <td><strong>${money2(r.total)}</strong></td>
+            <td>${esc(r.status)}</td>
+          </tr>`).join("")
+          : '<tr><td colspan="9" class="empty-note">No orders in this month.</td></tr>';
+
+        LAST_REPORT = d;
+        $("taxCsv").style.display = "inline-block";
+      } catch (e) { showMsg("taxMsg", e.message, false); }
+      btn.disabled = false;
+    });
+
+    const csvCell = (v) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    $("taxCsv").addEventListener("click", () => {
+      if (!LAST_REPORT) return;
+      const d = LAST_REPORT;
+      const n2 = (v) => Number(v || 0).toFixed(2);
+      const lines = [];
+      lines.push(["Schmidt's Sausage Haus — Sales & Tax Report", d.month].map(csvCell).join(","));
+      lines.push("");
+      lines.push("Summary");
+      lines.push(["Orders", d.orders].join(","));
+      lines.push(["Gross Sales", n2(d.grossSales)].join(","));
+      lines.push(["Subtotal (pre-tax)", n2(d.subtotal)].join(","));
+      lines.push(["Shipping", n2(d.shipping)].join(","));
+      lines.push(["Discounts", n2(d.discounts)].join(","));
+      lines.push(["Total Tax Collected", n2(d.totalTax)].join(","));
+      lines.push("");
+      lines.push("Tax Breakdown");
+      lines.push(["Tax / Jurisdiction", "Type", "Orders", "Amount"].join(","));
+      (d.taxes || []).forEach((t) =>
+        lines.push([csvCell(t.name), t.type, t.orders, n2(t.amount)].join(",")));
+      lines.push("");
+      lines.push("Order Detail");
+      lines.push(["Order", "Date", "Customer", "Subtotal", "Shipping", "Discount", "Tax", "Total", "Payment Status"].join(","));
+      (d.orderRows || []).forEach((r) =>
+        lines.push([csvCell(r.order), new Date(r.date).toISOString().slice(0, 10), csvCell(r.customer),
+          n2(r.subtotal), n2(r.shipping), n2(r.discount), n2(r.tax), n2(r.total), r.status].join(",")));
+      const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `schmidts-sales-tax-${$("taxMonth").value || "report"}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    });
+
+    // ---------------- owner-tools wiring ----------------
+    $("ownerBtn").addEventListener("click", () => {
+      if ($("ownerBtn").textContent.startsWith("Sign Out")) adminSignOut();
+      else openAdminModal();
+    });
+    $("adminSignInBtn").addEventListener("click", adminSignIn);
+    $("adminPw").addEventListener("keydown", (e) => { if (e.key === "Enter") adminSignIn(); });
+    $("adminModalClose").addEventListener("click", closeAdminModal);
+    $("adminModal").addEventListener("click", (e) => { if (e.target === $("adminModal")) closeAdminModal(); });
+
+    // Ask the server what this browser is allowed to see, then set up the menu.
+    (async () => {
+      try {
+        const cfg = await fetch("/api/config", { credentials: "same-origin" }).then((r) => r.json());
+        if (cfg.promoFormUrl) PROMO_FORM_URL = cfg.promoFormUrl;
+        else $("newPromoBtn").style.display = "none";
+        if (!cfg.adminEnabled) { $("ownerBtn").style.display = "none"; return; }
+        $("ownerBtn").style.display = "";
+        setSignedIn(!!cfg.signedIn);
+        if (cfg.signedIn) loadAdminData();
+        // deep link: /admin redirects to /#adminProducts
+        if (cfg.signedIn && location.hash.startsWith("#admin")) showTab(location.hash.slice(1));
+      } catch { $("ownerBtn").style.display = "none"; }
+    })();
 
     load();
     setInterval(load, 5 * 60 * 1000); // auto-refresh every 5 minutes
