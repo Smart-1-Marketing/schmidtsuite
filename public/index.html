@@ -255,6 +255,23 @@
     .switch input:checked + .slider { background: var(--green); }
     .switch input:checked + .slider:before { transform: translateX(20px); }
     .switch input:disabled + .slider { opacity: 0.5; cursor: wait; }
+    .bulk-bar {
+      display: none; align-items: center; flex-wrap: wrap; gap: 10px;
+      background: var(--cream); border: 1px solid #e6dac0; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 14px;
+    }
+    .bulk-bar.open { display: flex; }
+    .btn-danger { background: var(--dark-red); color: var(--white); border-color: var(--dark-red); }
+    .btn-danger:hover { background: #5a0f12; }
+    .hidden-drawer { margin-top: 18px; border-top: 1px solid #eee; padding-top: 14px; }
+    .hidden-drawer > summary {
+      cursor: pointer; font-weight: 600; color: var(--muted); list-style: none; padding: 8px 0;
+    }
+    .hidden-drawer > summary::before { content: "▸ "; }
+    .hidden-drawer[open] > summary::before { content: "▾ "; }
+    .hidden-drawer > summary:hover { color: var(--text); }
+    .photo-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+    .photo-thumb { width: 74px; height: 74px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
     .modal-box.small { max-width: 420px; }
     .modal-pad { padding: 20px; }
     @media (max-width: 700px) {
@@ -697,26 +714,7 @@
         <span class="badge badge-gold">Owner Tools</span>
       </div>
 
-      <div class="card">
-        <div class="row-flex" style="margin-bottom:14px;">
-          <h3 style="margin:0;flex:1;">Turn Products On / Off</h3>
-          <input type="text" class="search" id="prodSearch" placeholder="Search by name or SKU…" />
-          <button class="btn" id="prodReload">Reload</button>
-        </div>
-        <div class="msg" id="toggleMsg"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>Status</th><th>On / Off</th><th></th></tr>
-            </thead>
-            <tbody id="prodBody">
-              <tr><td colspan="8" class="empty-note">Loading products…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card" id="productFormCard">
+<div class="card" id="productFormCard">
         <h3 id="productFormTitle">Add a Product to the Store</h3>
         <div class="form-grid">
           <div class="full">
@@ -744,13 +742,17 @@
             <textarea id="pDesc" placeholder="Shown on the product page"></textarea>
           </div>
           <div class="full">
-            <label>Product Photo</label>
+            <label>Product Photos</label>
             <div class="row-flex">
-              <img id="pImgPreview" alt="" style="display:none;width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" />
-              <input type="file" id="pImage" accept="image/*" style="flex:1;min-width:220px;" />
+              <input type="file" id="pImage" accept="image/*" multiple style="flex:1;min-width:220px;" />
               <button class="btn" id="pImgClear" type="button" style="display:none;">Clear</button>
             </div>
-            <p class="note">JPG, PNG, GIF or WebP up to 10 MB. Uploading replaces the product's main photo in Ecwid.</p>
+            <div id="pImgPreview" class="photo-strip" style="display:none;"></div>
+            <label id="pKeepMainWrap" style="display:none;align-items:center;gap:10px;margin-top:10px;">
+              <span class="switch"><input type="checkbox" id="pKeepMain" /><span class="slider"></span></span>
+              Keep the current main photo (new uploads go to the gallery)
+            </label>
+            <p class="note">Pick several at once — the first becomes the main photo and the rest fill the gallery. JPG, PNG, GIF or WebP up to 10 MB each.</p>
           </div>
           <div class="full">
             <label style="display:flex;align-items:center;gap:10px;margin-top:15px;">
@@ -765,6 +767,62 @@
           <button class="btn" id="cancelEditBtn" style="display:none;">Cancel Edit</button>
         </div>
         <p class="note">Writes straight to the live Ecwid store. Shipping rules and taxes stay in Ecwid.</p>
+      </div>
+      <div class="card">
+        <div class="row-flex" style="margin-bottom:14px;">
+          <h3 style="margin:0;">Products</h3>
+          <span class="note" id="prodCount" style="margin:0;flex:1;"></span>
+          <input type="text" class="search" id="prodSearch" placeholder="Search by name or SKU…" />
+          <button class="btn" id="prodReload">Reload</button>
+        </div>
+        <div class="msg" id="toggleMsg"></div>
+
+        <!-- appears once something is ticked -->
+        <div class="bulk-bar" id="bulkBar">
+          <strong id="bulkCount">0 selected</strong>
+          <button class="btn" id="bulkOn">Turn On</button>
+          <button class="btn" id="bulkOff">Turn Off</button>
+          <select id="bulkCategory" class="field" style="width:auto;min-width:180px;">
+            <option value="">Move to category…</option>
+          </select>
+          <button class="btn" id="bulkMove">Move</button>
+          <button class="btn btn-danger" id="bulkDelete">Delete</button>
+          <button class="btn" id="bulkClear">Clear</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:34px;"><input type="checkbox" id="checkAllLive" title="Select all live products" /></th>
+                <th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="prodBody">
+              <tr><td colspan="8" class="empty-note">Loading products…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- hidden products tucked away, since most stores have far more of them -->
+        <details class="hidden-drawer" id="hiddenDrawer">
+          <summary>
+            <span id="hiddenSummary">Hidden products</span>
+          </summary>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:34px;"><input type="checkbox" id="checkAllHidden" title="Select all hidden products" /></th>
+                  <th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="hiddenBody">
+                <tr><td colspan="8" class="empty-note">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -1614,6 +1672,7 @@
       if (ADMIN_READY) return;
       ADMIN_READY = true;
       loadProducts();
+      loadCategories();
       loadCoupons();
       loadAbandoned();
       loadRecoveryStatus();
@@ -1635,17 +1694,47 @@
       };
     }
 
+    // ---- photos: first file becomes the main image, the rest go to the gallery ----
+    function renderPhotoPreviews() {
+      const box = $("pImgPreview");
+      const files = [...$("pImage").files];
+      const current = $("pImage").dataset.currentUrl || "";
+      box.innerHTML = "";
+
+      if (!files.length && current) {
+        box.innerHTML = `<img src="${esc(current)}" alt="" class="photo-thumb" />
+          <span class="note" style="margin:0;align-self:center;">current photo</span>`;
+      } else if (files.length) {
+        files.forEach((f, i) => {
+          const img = document.createElement("img");
+          img.src = URL.createObjectURL(f);
+          img.className = "photo-thumb";
+          img.title = f.name;
+          box.appendChild(img);
+          const tag = document.createElement("span");
+          tag.className = "note";
+          tag.style.cssText = "margin:0;align-self:center;";
+          tag.textContent = i === 0 && !$("pKeepMain").checked ? "main photo" : "gallery";
+          box.appendChild(tag);
+        });
+      }
+      box.style.display = box.innerHTML ? "flex" : "none";
+      $("pImgClear").style.display = files.length || current ? "" : "none";
+      // "keep the main photo" only makes sense while editing something that has one
+      $("pKeepMainWrap").style.display = EDIT_ID && current ? "" : "none";
+    }
+
     function resetProductForm() {
       EDIT_ID = null;
       ["pName", "pPrice", "pSku", "pQty", "pWeight", "pDesc"].forEach((id) => ($(id).value = ""));
       $("pEnabled").checked = true;
       $("pImage").value = "";
-      $("pImgPreview").style.display = "none";
-      $("pImgPreview").removeAttribute("src");
-      $("pImgClear").style.display = "none";
+      $("pImage").dataset.currentUrl = "";
+      $("pKeepMain").checked = false;
       $("productFormTitle").textContent = "Add a Product to the Store";
       $("addBtn").textContent = "Add Product to Ecwid";
       $("cancelEditBtn").style.display = "none";
+      renderPhotoPreviews();
     }
 
     function editProduct(id) {
@@ -1660,60 +1749,55 @@
       $("pDesc").value = (p.description || "").replace(/<[^>]*>/g, "").trim();
       $("pEnabled").checked = !!p.enabled;
       $("pImage").value = "";
-      if (p.imageUrl) {
-        $("pImgPreview").src = p.imageUrl;
-        $("pImgPreview").style.display = "";
-        $("pImgClear").style.display = "";
-      } else {
-        $("pImgPreview").style.display = "none";
-        $("pImgClear").style.display = "none";
-      }
+      $("pImage").dataset.currentUrl = p.imageUrl || "";
+      $("pKeepMain").checked = !!p.imageUrl;   // default: don't clobber an existing photo
       $("productFormTitle").textContent = `Edit Product — ${p.name}`;
       $("addBtn").textContent = "Save Changes";
       $("cancelEditBtn").style.display = "";
       $("addMsg").className = "msg";
+      renderPhotoPreviews();
       $("productFormCard").scrollIntoView({ behavior: "smooth" });
     }
     window.editProduct = editProduct;
-    $("cancelEditBtn").addEventListener("click", resetProductForm);
 
-    // preview a newly chosen file before it is uploaded
-    $("pImage").addEventListener("change", () => {
-      const f = $("pImage").files[0];
-      if (!f) return;
-      $("pImgPreview").src = URL.createObjectURL(f);
-      $("pImgPreview").style.display = "";
-      $("pImgClear").style.display = "";
-    });
+    $("cancelEditBtn").addEventListener("click", resetProductForm);
+    $("pImage").addEventListener("change", renderPhotoPreviews);
+    $("pKeepMain").addEventListener("change", renderPhotoPreviews);
+
     $("pImgClear").addEventListener("click", async () => {
-      // With a file staged, just drop it. Otherwise remove the live photo.
+      // With files staged, just drop them. Otherwise remove the live photo.
       if ($("pImage").files.length) {
         $("pImage").value = "";
-        $("pImgPreview").style.display = "none";
-        $("pImgClear").style.display = EDIT_ID ? "" : "none";
+        renderPhotoPreviews();
         return;
       }
       if (!EDIT_ID) return;
-      if (!confirm("Remove this product's photo from the store?")) return;
+      if (!confirm("Remove this product's main photo from the store?")) return;
       try {
         await adminApi(`/admin/api/products/${encodeURIComponent(EDIT_ID)}/image`, { method: "DELETE" });
-        $("pImgPreview").style.display = "none";
-        $("pImgClear").style.display = "none";
+        $("pImage").dataset.currentUrl = "";
+        renderPhotoPreviews();
         showMsg("addMsg", "Photo removed.", true);
         loadProducts();
       } catch (e) { showMsg("addMsg", e.message, false); }
     });
 
-    async function uploadProductImage(productId) {
-      const file = $("pImage").files[0];
-      if (!file) return null;
-      if (file.size > 10 * 1024 * 1024) throw new Error("That image is over 10 MB — please shrink it first.");
-      await adminApi(`/admin/api/products/${encodeURIComponent(productId)}/image`, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      return file.name;
+    async function uploadProductPhotos(productId) {
+      const files = [...$("pImage").files];
+      if (!files.length) return 0;
+      const tooBig = files.find((f) => f.size > 10 * 1024 * 1024);
+      if (tooBig) throw new Error(`"${tooBig.name}" is over 10 MB — please shrink it first.`);
+
+      // First file is the main photo unless we're keeping the existing one.
+      const keepMain = $("pKeepMain").checked && $("pImage").dataset.currentUrl;
+      for (let i = 0; i < files.length; i++) {
+        const gallery = keepMain || i > 0;
+        await adminApi(
+          `/admin/api/products/${encodeURIComponent(productId)}/image${gallery ? "?gallery=1" : ""}`,
+          { method: "POST", headers: { "Content-Type": files[i].type || "application/octet-stream" }, body: files[i] }
+        );
+      }
+      return files.length;
     }
 
     $("addBtn").addEventListener("click", async () => {
@@ -1744,10 +1828,10 @@
 
         let photoNote = "";
         try {
-          const uploaded = await uploadProductImage(id);
-          if (uploaded) photoNote = ` Photo "${uploaded}" uploaded.`;
+          const n = await uploadProductPhotos(id);
+          if (n) photoNote = ` ${n} photo${n === 1 ? "" : "s"} uploaded.`;
         } catch (imgErr) {
-          photoNote = ` (Saved, but the photo failed: ${imgErr.message})`;
+          photoNote = ` (Saved, but a photo failed: ${imgErr.message})`;
         }
 
         showMsg("addMsg",
@@ -1765,41 +1849,145 @@
       if (!EDIT_ID) btn.textContent = "Add Product to Ecwid";
     });
 
-    // ---------------- products on / off ----------------
+    // ---------------- products: live list, hidden drawer, bulk actions ----------------
     let PRODUCTS = [];
+    let CATEGORIES = [];
+    const SELECTED = new Set();
+
     async function loadProducts() {
       try {
         const data = await adminApi("/admin/api/products");
         PRODUCTS = data.products || [];
+        SELECTED.forEach((id) => {
+          if (!PRODUCTS.some((p) => String(p.id) === id)) SELECTED.delete(id);
+        });
         renderProducts();
       } catch (e) {
-        $("prodBody").innerHTML = `<tr><td colspan="6" style="color:var(--red);">${esc(e.message)}</td></tr>`;
+        $("prodBody").innerHTML = `<tr><td colspan="8" style="color:var(--red);">${esc(e.message)}</td></tr>`;
       }
     }
-    function renderProducts() {
-      const q = $("prodSearch").value.trim().toLowerCase();
-      const list = PRODUCTS.filter((p) =>
-        !q || (p.name || "").toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q));
-      $("prodBody").innerHTML = list.length ? list.map((p) => `
+
+    async function loadCategories() {
+      try {
+        const d = await adminApi("/admin/api/categories");
+        CATEGORIES = d.categories || [];
+        $("bulkCategory").innerHTML = '<option value="">Move to category…</option>' +
+          CATEGORIES.map((c) => `<option value="${esc(String(c.id))}">${esc(c.name)}</option>`).join("");
+      } catch { /* categories are optional — the other bulk actions still work */ }
+    }
+
+    function productRow(p) {
+      const checked = SELECTED.has(String(p.id)) ? "checked" : "";
+      return `
         <tr>
+          <td><input type="checkbox" class="prod-check" data-id="${esc(String(p.id))}" ${checked} /></td>
           <td>${p.imageUrl
             ? `<img src="${esc(p.imageUrl)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />`
-            : '<span class="note" style="margin:0;">no photo</span>'}</td>
+            : '<div style="width:46px;height:46px;border-radius:6px;border:1px dashed var(--border);background:#fafafa;" title="No photo in Ecwid"></div>'}</td>
           <td>${esc(p.name)}</td>
           <td>${esc(p.sku || "—")}</td>
           <td>${money2(p.price)}</td>
           <td>${p.unlimited ? "∞" : (p.quantity ?? "—")}</td>
-          <td>${p.enabled ? '<span class="badge badge-green">Live</span>' : '<span class="badge badge-red">Hidden</span>'}</td>
           <td>
             <label class="switch">
-              <input type="checkbox" ${p.enabled ? "checked" : ""} data-id="${p.id}" onchange="toggleProduct(this)" />
+              <input type="checkbox" ${p.enabled ? "checked" : ""} data-id="${esc(String(p.id))}" onchange="toggleProduct(this)" />
               <span class="slider"></span>
             </label>
           </td>
           <td><button class="btn" onclick="editProduct('${esc(String(p.id))}')">Edit</button></td>
-        </tr>`).join("")
-        : '<tr><td colspan="8" class="empty-note">No products match.</td></tr>';
+        </tr>`;
     }
+
+    function renderProducts() {
+      const q = $("prodSearch").value.trim().toLowerCase();
+      const match = (p) =>
+        !q || (p.name || "").toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q);
+
+      const live = PRODUCTS.filter((p) => p.enabled && match(p));
+      const hidden = PRODUCTS.filter((p) => !p.enabled && match(p));
+
+      $("prodBody").innerHTML = live.length
+        ? live.map(productRow).join("")
+        : `<tr><td colspan="8" class="empty-note">${q ? "No live products match that search." : "No live products."}</td></tr>`;
+      $("hiddenBody").innerHTML = hidden.length
+        ? hidden.map(productRow).join("")
+        : `<tr><td colspan="8" class="empty-note">${q ? "No hidden products match that search." : "Nothing hidden."}</td></tr>`;
+
+      const totalLive = PRODUCTS.filter((p) => p.enabled).length;
+      $("prodCount").textContent =
+        `${totalLive} live • ${PRODUCTS.length - totalLive} hidden` + (q ? ` • ${live.length + hidden.length} match "${q}"` : "");
+      $("hiddenSummary").textContent =
+        `Hidden products (${hidden.length}${q ? " matching" : ""}) — not shown in the store`;
+
+      document.querySelectorAll(".prod-check").forEach((c) =>
+        c.addEventListener("change", () => {
+          if (c.checked) SELECTED.add(c.dataset.id); else SELECTED.delete(c.dataset.id);
+          renderBulkBar();
+        })
+      );
+      $("checkAllLive").checked = live.length > 0 && live.every((p) => SELECTED.has(String(p.id)));
+      $("checkAllHidden").checked = hidden.length > 0 && hidden.every((p) => SELECTED.has(String(p.id)));
+      renderBulkBar();
+    }
+
+    function renderBulkBar() {
+      const n = SELECTED.size;
+      $("bulkBar").classList.toggle("open", n > 0);
+      $("bulkCount").textContent = `${n} selected`;
+    }
+
+    function selectAll(list, on) {
+      list.forEach((p) => (on ? SELECTED.add(String(p.id)) : SELECTED.delete(String(p.id))));
+      renderProducts();
+    }
+
+    const visible = (wantEnabled) => {
+      const q = $("prodSearch").value.trim().toLowerCase();
+      return PRODUCTS.filter((p) => !!p.enabled === wantEnabled)
+        .filter((p) => !q || (p.name || "").toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q));
+    };
+
+    $("checkAllLive").addEventListener("change", function () { selectAll(visible(true), this.checked); });
+    $("checkAllHidden").addEventListener("change", function () { selectAll(visible(false), this.checked); });
+    $("bulkClear").addEventListener("click", () => { SELECTED.clear(); renderProducts(); });
+    $("prodSearch").addEventListener("input", renderProducts);
+    $("prodReload").addEventListener("click", loadProducts);
+
+    async function runBulk(action, extra, confirmText) {
+      if (!SELECTED.size) return;
+      if (confirmText && !confirm(confirmText)) return;
+      const buttons = ["bulkOn", "bulkOff", "bulkMove", "bulkDelete"];
+      buttons.forEach((b) => ($(b).disabled = true));
+      try {
+        const out = await adminApi("/admin/api/products/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ids: [...SELECTED], ...extra }),
+        });
+        showMsg("toggleMsg", out.message, out.ok);
+        SELECTED.clear();
+        await loadProducts();
+      } catch (e) { showMsg("toggleMsg", e.message, false); }
+      buttons.forEach((b) => ($(b).disabled = false));
+    }
+
+    $("bulkOn").addEventListener("click", () => runBulk("enable", {}));
+    $("bulkOff").addEventListener("click", () => runBulk("disable", {}));
+    $("bulkMove").addEventListener("click", () => {
+      const categoryId = $("bulkCategory").value;
+      if (!categoryId) { showMsg("toggleMsg", "Pick a category first.", false); return; }
+      const name = $("bulkCategory").selectedOptions[0].textContent;
+      runBulk("category", { categoryId },
+        `Move ${SELECTED.size} product(s) into "${name}"?\n\nThis replaces whatever categories they're in now.`);
+    });
+    $("bulkDelete").addEventListener("click", () => {
+      const names = [...SELECTED].slice(0, 5)
+        .map((id) => (PRODUCTS.find((p) => String(p.id) === id) || {}).name)
+        .filter(Boolean).join("\n• ");
+      runBulk("delete", {},
+        `Permanently delete ${SELECTED.size} product(s) from Ecwid?\n\n• ${names}${SELECTED.size > 5 ? `\n…and ${SELECTED.size - 5} more` : ""}\n\nThis cannot be undone.`);
+    });
+
     async function toggleProduct(input) {
       const id = input.dataset.id;
       const enabled = input.checked;
@@ -1821,8 +2009,6 @@
       input.disabled = false;
     }
     window.toggleProduct = toggleProduct;
-    $("prodSearch").addEventListener("input", renderProducts);
-    $("prodReload").addEventListener("click", loadProducts);
 
     // ---------------- discount codes ----------------
     const discText = (c) =>

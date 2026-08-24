@@ -1492,6 +1492,96 @@ app.delete("/admin/api/products/:id/image", requireAdmin, safe(async (req) => {
   return { ok: true };
 }));
 
+// ---- Store categories (for the "move to category" bulk action) ----
+app.get("/admin/api/categories", requireAdmin, safe(async () => {
+  if (MOCK) {
+    return { categories: [
+      { id: 1, name: "Wine", parentId: null, enabled: true },
+      { id: 2, name: "Merchandise", parentId: null, enabled: true },
+      { id: 3, name: "Events & Tickets", parentId: null, enabled: true },
+    ] };
+  }
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+  const items = await ecwidPageAll("/categories");
+  return {
+    categories: items
+      .map((c) => ({ id: c.id, name: c.name, parentId: c.parentId || null, enabled: c.enabled }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+  };
+}));
+
+// ---- Bulk actions on selected products ----
+// One request instead of hundreds: the browser sends the ids and what to do,
+// and this runs them a few at a time so Ecwid's rate limit stays happy. Every
+// id reports back its own result, so a couple of failures don't hide the rest.
+const BULK_ACTIONS = new Set(["enable", "disable", "delete", "category"]);
+
+async function inBatches(items, size, fn) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
+  }
+  return out;
+}
+
+app.post("/admin/api/products/bulk", requireAdmin, express.json(), safe(async (req) => {
+  const action = String(req.body?.action || "");
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  const categoryId = req.body?.categoryId;
+
+  if (!BULK_ACTIONS.has(action))
+    throw Object.assign(new Error("Unknown bulk action."), { status: 400 });
+  if (!ids.length)
+    throw Object.assign(new Error("Nothing selected."), { status: 400 });
+  if (ids.length > 500)
+    throw Object.assign(new Error("That's more than 500 products at once — narrow it down a bit."), { status: 400 });
+  if (action === "category" && (categoryId === undefined || categoryId === null || categoryId === ""))
+    throw Object.assign(new Error("Pick a category first."), { status: 400 });
+
+  const runOne = async (id) => {
+    try {
+      if (MOCK) {
+        const list = getMockProducts();
+        const i = list.findIndex((p) => String(p.id) === id);
+        if (i < 0) throw new Error("Product not found.");
+        if (action === "delete") list.splice(i, 1);
+        else if (action === "enable") list[i].enabled = true;
+        else if (action === "disable") list[i].enabled = false;
+        else if (action === "category") list[i].categoryIds = [Number(categoryId)];
+        return { id, ok: true };
+      }
+      if (action === "delete") {
+        await ecwidWrite("DELETE", `/products/${encodeURIComponent(id)}`, undefined);
+      } else if (action === "category") {
+        // Moves the product: its categories are replaced with this one.
+        await ecwidWrite("PUT", `/products/${encodeURIComponent(id)}`, {
+          categoryIds: [Number(categoryId)],
+          defaultCategoryId: Number(categoryId),
+        });
+      } else {
+        await ecwidWrite("PUT", `/products/${encodeURIComponent(id)}`, { enabled: action === "enable" });
+      }
+      return { id, ok: true };
+    } catch (e) {
+      return { id, ok: false, error: e.message };
+    }
+  };
+
+  const results = await inBatches(ids, 4, runOne);
+  simpleCache.delete("ecwid");
+  const failed = results.filter((r) => !r.ok);
+  const done = results.length - failed.length;
+  const verb = { enable: "turned on", disable: "turned off", delete: "deleted", category: "moved" }[action];
+  return {
+    ok: failed.length === 0,
+    done,
+    failed,
+    message: failed.length
+      ? `${done} of ${results.length} ${verb}; ${failed.length} failed (${failed[0].error})`
+      : `${done} product${done === 1 ? "" : "s"} ${verb}.`,
+  };
+}));
+
 // ---- Monthly sales + state/local tax breakdown ----
 function classifyTaxName(name) {
   const n = (name || "").toLowerCase();
