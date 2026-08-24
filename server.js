@@ -1027,6 +1027,67 @@ async function getSocialSuggestions(force = false) {
   return out;
 }
 
+// ---- Make a post image on request (each one costs OpenAI credits, so it
+// only ever runs when someone clicks the button) ----
+const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+const IMAGE_SIZES = { square: "1024x1024", portrait: "1024x1536", landscape: "1536x1024" };
+
+app.post("/api/social/image", requireAdmin, express.json(), safe(async (req) => {
+  if (!OPENAI_API_KEY) throw Object.assign(new Error("OPENAI_API_KEY not configured."), { status: 503 });
+  const b = req.body || {};
+  const holiday = String(b.holiday || "").slice(0, 120);
+  const idea = String(b.promoIdea || "").slice(0, 400);
+  const post = String(b.samplePost || "").slice(0, 400);
+  if (!holiday && !idea) throw Object.assign(new Error("Nothing to make a picture of."), { status: 400 });
+  const size = IMAGE_SIZES[b.size] || IMAGE_SIZES.square;
+
+  const prompt =
+    `A warm, appetising social media photo for ${BRAND_NAME}, a lakeside winery in Thornville, Ohio ` +
+    `with a tasting room, patio, live music and a food menu.\n` +
+    `Occasion: ${holiday}\nWhat we're promoting: ${idea}\n` +
+    `Style: natural daylight or golden-hour lakeside light, shallow depth of field, inviting and real — ` +
+    `like a good phone photo from the patio, not a stock advert. Warm wood, wine glasses, greenery.\n` +
+    `Important: no text, no words, no lettering, no logos, and no watermarks anywhere in the image. ` +
+    `No people's faces in close-up.`;
+
+  const call = async (model) => {
+    const resp = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, size, n: 1 }),
+    });
+    if (!resp.ok) {
+      const err = new Error(`OpenAI images ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+      err.status = resp.status;
+      throw err;
+    }
+    return resp.json();
+  };
+
+  let data;
+  try {
+    data = await call(OPENAI_IMAGE_MODEL);
+  } catch (e) {
+    // gpt-image-1 needs a verified OpenAI org; fall back to DALL·E 3 so the
+    // button still works on accounts that haven't done that.
+    if (OPENAI_IMAGE_MODEL === "gpt-image-1") {
+      const dalleSize = size === "1024x1536" ? "1024x1792" : size === "1536x1024" ? "1792x1024" : "1024x1024";
+      const resp = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "dall-e-3", prompt, size: dalleSize, n: 1, response_format: "b64_json" }),
+      });
+      if (!resp.ok) throw new Error(`Image generation failed: ${(await resp.text()).slice(0, 200)}`);
+      data = await resp.json();
+      data.model = "dall-e-3";
+    } else throw e;
+  }
+
+  const b64 = data?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("The image service didn't return a picture.");
+  return { image: `data:image/png;base64,${b64}`, model: data.model || OPENAI_IMAGE_MODEL, size };
+}));
+
 // ================================================================ REVIEW
 function buildReview({ ecwid, promos, analytics }) {
   const items = [];

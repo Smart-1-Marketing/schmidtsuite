@@ -272,6 +272,11 @@
     .hidden-drawer > summary:hover { color: var(--text); }
     .photo-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
     .photo-thumb { width: 74px; height: 74px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+    .social-image { margin-top: 14px; }
+    .social-image img {
+      width: 100%; max-width: 340px; border-radius: 10px;
+      border: 1px solid var(--border); display: block;
+    }
     .modal-box.small { max-width: 420px; }
     .modal-pad { padding: 20px; }
     @media (max-width: 700px) {
@@ -1456,7 +1461,7 @@
       const list = d.social?.suggestions || [];
       const lineLabel = { restaurant: "Restaurant", catering: "Catering", foodtrucks: "Food Trucks" };
       grid.innerHTML = list.length
-        ? list.map((s) => `
+        ? list.map((s, i) => `
           <article class="promo-card social-card">
             <div class="promo-head">
               <div>
@@ -1478,10 +1483,53 @@
             </div>
             <div class="promo-buttons">
               <button class="btn" onclick="navigator.clipboard.writeText(this.closest('article').querySelector('.social-post').innerText.replace('Ready-to-Use Post','').trim()).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy Post',1500);})">Copy Post</button>
+              <select class="field social-size" style="width:auto;">
+                <option value="square">Square</option>
+                <option value="portrait">Portrait (stories)</option>
+                <option value="landscape">Landscape</option>
+              </select>
+              <button class="btn btn-primary" onclick="makeSocialImage(${i}, this)">Want an image?</button>
             </div>
+            <div class="social-image" id="socialImg${i}"></div>
           </article>`).join("")
         : '<div class="empty-note">No suggestions yet — click "Get Fresh Ideas".</div>';
     }
+
+    // Pictures cost credits, so nothing is generated until someone asks.
+    async function makeSocialImage(i, btn) {
+      const s = (DATA?.social?.suggestions || [])[i];
+      if (!s) return;
+      const box = $("socialImg" + i);
+      const size = btn.parentElement.querySelector(".social-size").value;
+      if (!confirm(`Create a ${size} image for "${s.holiday}"?
+
+This uses your OpenAI credits — roughly a few cents per picture.`)) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span>Painting…';
+      box.innerHTML = "";
+      try {
+        const resp = await fetch("/api/social/image", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ holiday: s.holiday, promoIdea: s.promoIdea, samplePost: s.samplePost, size }),
+        });
+        const d = await resp.json();
+        if (!resp.ok) throw new Error(d.error || ("HTTP " + resp.status));
+        const name = (s.holiday || "social-post").replace(/[^a-z0-9]/gi, "-").toLowerCase();
+        box.innerHTML = `
+          <img src="${d.image}" alt="" />
+          <div class="promo-buttons">
+            <a class="btn btn-primary" href="${d.image}" download="${name}.png">Download</a>
+            <button class="btn" onclick="makeSocialImage(${i}, this)">Try Another</button>
+          </div>`;
+      } catch (e) {
+        box.innerHTML = `<div class="note" style="color:var(--red);">${esc(e.message === "Not signed in." ? "Sign in to Store Tools first — image generation spends credits." : e.message)}</div>`;
+      }
+      btn.disabled = false;
+      btn.textContent = "Want an image?";
+    }
+    window.makeSocialImage = makeSocialImage;
 
     function renderReview(d) {
       const box = $("reviewItems");
