@@ -780,7 +780,7 @@ async function getAnalytics() {
     }),
     ga4RunReport({
       dateRanges: PERIOD_KEYS.map(curRange),
-      dimensions: [{ name: "pagePath" }],
+      dimensions: [{ name: "pageTitle" }],
       metrics: [{ name: "screenPageViews" }],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 1000,
@@ -845,11 +845,13 @@ async function getAnalytics() {
     return out;
   };
   const topPages = splitByRange(pages, (r) => ({
-    page: r.dimensionValues[0].value,
+    // GA4 gives the browser title; trim the site name most themes append.
+    page: String(r.dimensionValues[0].value || "").split(" | ")[0].split(" - ")[0].trim() || "(untitled)",
     views: Number(r.metricValues[0].value),
   }));
+  const CHANNEL_LABELS = { Unassigned: "Smart 1 Targeted Display" };
   const topChannels = splitByRange(channels, (r) => ({
-    channel: r.dimensionValues[0].value,
+    channel: CHANNEL_LABELS[r.dimensionValues[0].value] || r.dimensionValues[0].value,
     sessions: Number(r.metricValues[0].value),
   }));
 
@@ -1226,11 +1228,11 @@ function mockAnalytics() {
     cartAbandonmentRate: Number((((t.addToCarts - t.purchases) / t.addToCarts) * 100).toFixed(1)),
   });
   const mkPages = (mult) => [
-    { page: "/", views: Math.round(3120 * mult) },
-    { page: "/menu", views: Math.round(2210 * mult) },
-    { page: "/store", views: Math.round(1480 * mult) },
-    { page: "/catering", views: Math.round(990 * mult) },
-    { page: "/food-truck", views: Math.round(720 * mult) },
+    { page: "Schmidt's Sausage Haus — Home", views: Math.round(3120 * mult) },
+    { page: "Menu", views: Math.round(2210 * mult) },
+    { page: "Online Store", views: Math.round(1480 * mult) },
+    { page: "Catering", views: Math.round(990 * mult) },
+    { page: "Food Trucks", views: Math.round(720 * mult) },
   ];
   const mkChannels = (mult) => [
     { channel: "Organic Search", sessions: Math.round(2110 * mult) },
@@ -1238,6 +1240,7 @@ function mockAnalytics() {
     { channel: "Organic Social", sessions: Math.round(740 * mult) },
     { channel: "Referral", sessions: Math.round(410 * mult) },
     { channel: "Email", sessions: Math.round(270 * mult) },
+    { channel: "Smart 1 Targeted Display", sessions: Math.round(180 * mult) },
   ];
   const mkKey = (mult) => [
     { label: "Home", thisWeek: { views: Math.round(3120 * mult), users: Math.round(2480 * mult) }, lastWeek: { views: Math.round(2870 * mult), users: Math.round(2260 * mult) }, viewsChangePercent: 8.7 },
