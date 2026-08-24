@@ -1354,7 +1354,7 @@ let mockProductList = null;
 function getMockProducts() {
   if (!mockProductList) {
     mockProductList = [
-      { id: 101, name: "Bahama Mama Sausages (4-pack)", sku: "BM-4PK", price: 24.0, enabled: true, quantity: 120, unlimited: false, weight: 2.5, description: "Our famous Bahama Mamas.", imageUrl: "" },
+      { id: 101, name: "Bahama Mama Sausages (4-pack)", sku: "BM-4PK", price: 24.0, enabled: true, quantity: 120, unlimited: false, weight: 2.5, description: "<h3>About</h3><p>Our famous Bahama Mamas.</p>", imageUrl: "", url: "https://schmidthaus.com/store/p/bahama-mama", categoryIds: [1], defaultCategoryId: 1 },
       { id: 102, name: "Jumbo Cream Puff Kit", sku: "CP-KIT", price: 29.0, enabled: true, quantity: 45, unlimited: false },
       { id: 103, name: "German Potato Salad (Family Size)", sku: "GPS-FAM", price: 19.0, enabled: true, quantity: 0, unlimited: true },
       { id: 104, name: "Sauerkraut Balls (Frozen, 24ct)", sku: "SKB-24", price: 18.0, enabled: false, quantity: 60, unlimited: false },
@@ -1374,6 +1374,9 @@ app.get("/admin/api/products", requireAdmin, safe(async () => {
       enabled: p.enabled, quantity: p.quantity, unlimited: p.unlimited,
       weight: p.weight, description: p.description || "",
       imageUrl: p.thumbnailUrl || p.imageUrl || p.smallThumbnailUrl || "",
+      url: p.url || "",
+      categoryIds: p.categoryIds || [],
+      defaultCategoryId: p.defaultCategoryId || null,
     })),
   };
 }));
@@ -1410,6 +1413,11 @@ app.post("/admin/api/products", requireAdmin, express.json(), safe(async (req) =
   } else {
     product.unlimited = true;
   }
+  const newCat = Number(b.categoryId);
+  if (newCat) {
+    product.categoryIds = [newCat];
+    product.defaultCategoryId = newCat;
+  }
   if (MOCK) {
     const p = { id: Math.floor(Math.random() * 0 + Date.now() % 100000), ...product };
     getMockProducts().unshift(p);
@@ -1433,6 +1441,15 @@ app.put("/admin/api/products/:id", requireAdmin, express.json(), safe(async (req
   if (b.description !== undefined) update.description = String(b.description);
   if (b.weight !== undefined && b.weight !== "") update.weight = Number(b.weight);
   if (b.enabled !== undefined) update.enabled = !!b.enabled;
+  if (b.categoryId !== undefined) {
+    const cat = Number(b.categoryId);
+    if (cat) {
+      update.categoryIds = [cat];
+      update.defaultCategoryId = cat;
+    } else {
+      update.categoryIds = [];          // "no category" clears it
+    }
+  }
   if (b.quantity !== undefined) {
     if (b.quantity === "" || b.quantity === null) {
       update.unlimited = true;
@@ -1511,6 +1528,85 @@ app.get("/admin/api/categories", requireAdmin, safe(async () => {
       .map((c) => ({ id: c.id, name: c.name, parentId: c.parentId || null, enabled: c.enabled }))
       .sort((a, b) => String(a.name).localeCompare(String(b.name))),
   };
+}));
+
+// ---- Create a category without leaving the dashboard ----
+app.post("/admin/api/categories", requireAdmin, express.json(), safe(async (req) => {
+  const name = String(req.body?.name || "").trim().slice(0, 120);
+  if (!name) throw Object.assign(new Error("Give the category a name."), { status: 400 });
+  if (MOCK) {
+    const c = { id: Date.now() % 100000, name, parentId: null, enabled: true };
+    return { ok: true, category: c, mock: true };
+  }
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+  const created = await ecwidWrite("POST", "/categories", { name, enabled: true });
+  return { ok: true, category: { id: created.id, name, parentId: null, enabled: true } };
+}));
+
+// ---- Borrow the layout of an existing product description ----
+// Product descriptions are HTML, and every store ends up with a house style —
+// same headings, same bullet pattern, same spacing. This reads one product's
+// description as the template and rewrites another product's copy into the
+// same shape, so new products don't look out of place on the site.
+app.post("/admin/api/products/style-description", requireAdmin, express.json(), safe(async (req) => {
+  if (!OPENAI_API_KEY) throw Object.assign(new Error("OPENAI_API_KEY not configured."), { status: 503 });
+  const sourceId = String(req.body?.sourceId || "");
+  const name = String(req.body?.name || "").trim().slice(0, 200);
+  const content = String(req.body?.content || "").trim().slice(0, 3000);
+  if (!sourceId) throw Object.assign(new Error("Pick a product to copy the styling from."), { status: 400 });
+  if (!name && !content) throw Object.assign(new Error("Add a product name or some description text first."), { status: 400 });
+
+  let template = "";
+  let templateName = "";
+  if (MOCK) {
+    templateName = "Sample product";
+    template = '<h3>Tasting notes</h3><p>Bright and easy drinking.</p><ul><li>750ml</li><li>Off-dry</li></ul>';
+  } else {
+    const src = await ecwidGet(`/products/${encodeURIComponent(sourceId)}`);
+    if (!src) throw Object.assign(new Error("Couldn't read that product."), { status: 404 });
+    template = String(src.description || "");
+    templateName = String(src.name || "");
+    if (!template.trim())
+      throw Object.assign(new Error(`"${templateName}" has no description to copy the styling from — pick another product.`), { status: 400 });
+  }
+
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature: 0.4,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            `You lay out product descriptions for ${BRAND_NAME}'s online store. You are given the HTML of an ` +
+            `existing product description that defines the house style. Copy its STRUCTURE exactly — the same ` +
+            `tags, heading levels, ordering of sections, list style, inline styles and general length — but write ` +
+            `the words for a different product. Keep any section headings the store uses (tasting notes, ` +
+            `details, shipping and so on) when they make sense for the new product, and drop ones that don't. ` +
+            `Never invent facts like vintages, ABV, awards, weights or allergens that you weren't given. ` +
+            `Return only JSON: {"html":"..."} where html is the finished description body — no <html>, <head> ` +
+            `or <body> wrapper, and no markdown fences.`,
+        },
+        {
+          role: "user",
+          content:
+            `HOUSE STYLE — the description HTML of "${templateName}":\n${template.slice(0, 4000)}\n\n` +
+            `NEW PRODUCT NAME: ${name || "(untitled)"}\n` +
+            `WHAT TO SAY (may be rough notes, plain text, or empty):\n${content || "(nothing supplied — write something short and factual from the product name alone)"}`,
+        },
+      ],
+    }),
+  });
+  if (!resp.ok) throw new Error(`OpenAI ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+  const data = await resp.json();
+  let html = "";
+  try { html = JSON.parse(data.choices[0].message.content).html || ""; } catch { throw new Error("The model returned something unreadable — try again."); }
+  html = html.replace(/^```(?:html)?\s*|\s*```$/g, "").trim();
+  if (!html) throw new Error("Nothing came back — try a different source product.");
+  return { html, styledAfter: templateName, model: OPENAI_MODEL };
 }));
 
 // ---- Bulk actions on selected products ----

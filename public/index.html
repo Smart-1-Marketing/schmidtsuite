@@ -222,13 +222,26 @@
     .modal-head h3 { margin: 0; color: var(--red); }
     .modal-body { flex: 1; overflow: hidden; }
     .modal-body iframe { width: 100%; height: 70vh; border: 0; display: block; }
-    /* ---------------- Owner Tools (admin tabs in the main menu) ---------------- */
+    /* ---------------- Ecom Tools (store tabs in the main menu) ---------------- */
     .tab-sep {
       width: 1px; align-self: stretch; background: var(--border); margin: 4px 6px;
     }
-    .tab.admin-tab { color: var(--dark-red); }
-    .tab.admin-tab::before { content: "🔒 "; font-size: 11px; }
-    .tab.admin-tab.active::before { content: ""; }
+    .tab-dropdown { position: relative; }
+    .tab-dropdown > .tab.active-parent { background: var(--red); color: var(--white); }
+    .dropdown-menu {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); padding: 6px; min-width: 215px;
+      display: none;
+    }
+    .tab-dropdown.open .dropdown-menu { display: block; }
+    .dropdown-item {
+      display: block; width: 100%; text-align: left; border: 0; background: transparent;
+      padding: 10px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; color: #444;
+    }
+    .dropdown-item:hover { background: #f3f3f3; }
+    .dropdown-item.active { background: var(--red); color: var(--white); }
+
     label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px; }
     input[type=text], input[type=number], input[type=password], input[type=month],
     textarea, select.field {
@@ -277,6 +290,15 @@
       width: 100%; max-width: 340px; border-radius: 10px;
       border: 1px solid var(--border); display: block;
     }
+    .page-link { text-decoration: none; margin-left: 6px; color: var(--blue); font-weight: bold; }
+    .page-link:hover { color: var(--red); }
+    .row-cat { padding: 6px 8px; font-size: 13px; max-width: 190px; }
+    .style-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .desc-preview {
+      border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+      background: #fcfcfc; margin-bottom: 10px; max-height: 320px; overflow: auto;
+    }
+    .desc-preview img { max-width: 100%; }
     .modal-box.small { max-width: 420px; }
     .modal-pad { padding: 20px; }
     @media (max-width: 700px) {
@@ -319,7 +341,7 @@
           <button class="btn period-btn" data-period="ytd">This Year</button>
         </div>
         <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
-        <button class="btn" id="ownerBtn" style="display:none;">Owner Tools</button>
+        <button class="btn" id="ownerBtn" style="display:none;">Ecom Tools Sign In</button>
       </div>
     </header>
 
@@ -337,12 +359,17 @@
       <button class="tab" data-tab="calendar">Campaign Calendar</button>
       <button class="tab" data-tab="social">Social Media</button>
       <button class="tab" data-tab="review">Review<span class="count" id="reviewCount" style="display:none;">0</span></button>
-      <!-- Owner Tools — visible in this same menu once signed in -->
+      <!-- Ecom Tools — the store tabs, shown in this menu once signed in -->
       <span class="tab-sep" id="adminSep" style="display:none;"></span>
-      <button class="tab admin-tab" data-tab="adminProducts" style="display:none;">Products</button>
-      <button class="tab admin-tab" data-tab="adminDiscounts" style="display:none;">Discount Codes</button>
-      <button class="tab admin-tab" data-tab="adminCarts" style="display:none;">Abandoned Carts</button>
-      <button class="tab admin-tab" data-tab="adminSales" style="display:none;">Sales &amp; Tax</button>
+      <div class="tab-dropdown" id="ecomDropdown" style="display:none;">
+        <button class="tab" id="ecomToggle" aria-haspopup="true" aria-expanded="false">Ecom Tools ▾</button>
+        <div class="dropdown-menu" id="ecomMenu" role="menu">
+          <button class="dropdown-item admin-tab" data-tab="adminProducts" role="menuitem">Products</button>
+          <button class="dropdown-item admin-tab" data-tab="adminDiscounts" role="menuitem">Discount Codes</button>
+          <button class="dropdown-item admin-tab" data-tab="adminCarts" role="menuitem">Abandoned Carts</button>
+          <button class="dropdown-item admin-tab" data-tab="adminSales" role="menuitem">Sales &amp; Tax</button>
+        </div>
+      </div>
     </nav>
 
     <!-- ================================================= -->
@@ -716,7 +743,7 @@
           <h2>Products</h2>
           <div class="section-note">Switch store products on and off, or add new products to Ecwid</div>
         </div>
-        <span class="badge badge-gold">Owner Tools</span>
+        <span class="badge badge-gold">Ecom Tools</span>
       </div>
 
 <div class="card" id="productFormCard">
@@ -742,8 +769,22 @@
             <label>Weight (lbs)</label>
             <input type="number" id="pWeight" min="0" step="0.01" placeholder="Optional — for shipping" />
           </div>
+          <div>
+            <label>Category</label>
+            <select id="pCategory" class="field"></select>
+            <p class="note">Pick where it sits in the shop, or create a category on the spot.</p>
+          </div>
           <div class="full">
             <label>Description</label>
+            <div class="style-row">
+              <span class="note" style="margin:0;">Match the layout of another product page?</span>
+              <input type="text" id="styleSource" list="styleSourceList" class="search" placeholder="Search products…" />
+              <datalist id="styleSourceList"></datalist>
+              <button class="btn" id="styleApplyBtn" type="button">Match Styling</button>
+              <button class="btn" id="descPreviewBtn" type="button">Preview</button>
+            </div>
+            <div class="msg" id="styleMsg"></div>
+            <div id="descPreview" class="desc-preview" style="display:none;"></div>
             <textarea id="pDesc" placeholder="Shown on the product page"></textarea>
           </div>
           <div class="full">
@@ -800,11 +841,11 @@
             <thead>
               <tr>
                 <th style="width:34px;"><input type="checkbox" id="checkAllLive" title="Select all live products" /></th>
-                <th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
+                <th>Photo</th><th>Product</th><th>Category</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
               </tr>
             </thead>
             <tbody id="prodBody">
-              <tr><td colspan="8" class="empty-note">Loading products…</td></tr>
+              <tr><td colspan="9" class="empty-note">Loading products…</td></tr>
             </tbody>
           </table>
         </div>
@@ -819,11 +860,11 @@
               <thead>
                 <tr>
                   <th style="width:34px;"><input type="checkbox" id="checkAllHidden" title="Select all hidden products" /></th>
-                  <th>Photo</th><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
+                  <th>Photo</th><th>Product</th><th>Category</th><th>SKU</th><th>Price</th><th>Stock</th><th>On / Off</th><th></th>
                 </tr>
               </thead>
               <tbody id="hiddenBody">
-                <tr><td colspan="8" class="empty-note">Loading…</td></tr>
+                <tr><td colspan="9" class="empty-note">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -840,7 +881,7 @@
           <h2>Discount Codes</h2>
           <div class="section-note">Create and review Ecwid coupon codes for promotions</div>
         </div>
-        <span class="badge badge-gold">Owner Tools</span>
+        <span class="badge badge-gold">Ecom Tools</span>
       </div>
       <div class="card">
         <h3>Create a Discount Code</h3>
@@ -919,7 +960,7 @@
           <h2>Abandoned Carts</h2>
           <div class="section-note">Recover unfinished online orders with an AI-drafted email sent through Smart 1 Suite</div>
         </div>
-        <span class="badge badge-gold">Owner Tools</span>
+        <span class="badge badge-gold">Ecom Tools</span>
       </div>
       <div class="card">
         <div class="row-flex" style="margin-bottom:6px;">
@@ -966,7 +1007,7 @@
           <h2>Sales &amp; Tax</h2>
           <div class="section-note">Monthly online sales with state and local tax collected, ready for the bookkeeper</div>
         </div>
-        <span class="badge badge-gold">Owner Tools</span>
+        <span class="badge badge-gold">Ecom Tools</span>
       </div>
       <div class="card">
         <div class="row-flex" style="margin-bottom:6px;">
@@ -1027,11 +1068,11 @@
   </div>
 
 
-  <!-- Owner Tools sign-in -->
+  <!-- Ecom Tools sign-in -->
   <div class="modal-overlay" id="adminModal">
     <div class="modal-box small">
       <div class="modal-head">
-        <h3>Owner Tools</h3>
+        <h3>Ecom Tools</h3>
         <button class="btn" id="adminModalClose">✕ Close</button>
       </div>
       <div class="modal-pad">
@@ -1050,10 +1091,44 @@
     function showTab(target) {
       tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === target));
       panels.forEach((p) => p.classList.toggle("active", p.id === target));
+      // Dropdown items aren't .tab buttons, so highlight them (and their
+      // parent menu button) separately.
+      const items = document.querySelectorAll(".dropdown-item");
+      let inMenu = false;
+      items.forEach((i) => {
+        const on = i.dataset.tab === target;
+        i.classList.toggle("active", on);
+        if (on) inMenu = true;
+      });
+      const toggle = document.getElementById("ecomToggle");
+      if (toggle) toggle.classList.toggle("active-parent", inMenu);
+      closeEcomMenu();
     }
     tabs.forEach((tab) =>
       tab.addEventListener("click", () => showTab(tab.dataset.tab))
     );
+    document.querySelectorAll(".dropdown-item").forEach((item) =>
+      item.addEventListener("click", () => showTab(item.dataset.tab))
+    );
+
+    // ---- Ecommerce menu open/close ----
+    function closeEcomMenu() {
+      const d = document.getElementById("ecomDropdown");
+      if (!d) return;
+      d.classList.remove("open");
+      document.getElementById("ecomToggle").setAttribute("aria-expanded", "false");
+    }
+    document.getElementById("ecomToggle").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const d = document.getElementById("ecomDropdown");
+      const open = d.classList.toggle("open");
+      document.getElementById("ecomToggle").setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#ecomDropdown")) closeEcomMenu();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeEcomMenu(); });
+
     document.querySelectorAll("[data-goto]").forEach((btn) =>
       btn.addEventListener("click", () => showTab(btn.dataset.goto))
     );
@@ -1524,7 +1599,7 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
             <button class="btn" onclick="makeSocialImage(${i}, this)">Try Another</button>
           </div>`;
       } catch (e) {
-        box.innerHTML = `<div class="note" style="color:var(--red);">${esc(e.message === "Not signed in." ? "Sign in to Store Tools first — image generation spends credits." : e.message)}</div>`;
+        box.innerHTML = `<div class="note" style="color:var(--red);">${esc(e.message === "Not signed in." ? "Sign in to Ecom Tools first — image generation spends credits." : e.message)}</div>`;
       }
       btn.disabled = false;
       btn.textContent = "Want an image?";
@@ -1674,14 +1749,13 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
 
     // ---------------- sign in / out ----------------
     function setSignedIn(on) {
-      document.querySelectorAll(".admin-tab, #adminSep").forEach((el) => {
-        el.style.display = on ? "" : "none";
-      });
-      $("ownerBtn").textContent = on ? "Sign Out of Owner Tools" : "Owner Tools";
+      $("adminSep").style.display = on ? "" : "none";
+      $("ecomDropdown").style.display = on ? "" : "none";
+      $("ownerBtn").textContent = on ? "Sign Out of Ecom Tools" : "Ecom Tools Sign In";
       if (!on) {
         ADMIN_READY = false;
         // never leave an owner panel on screen after signing out
-        if (document.querySelector(".admin-tab.active")) showTab("overview");
+        if (document.querySelector(".dropdown-item.active")) showTab("overview");
       }
     }
     function openAdminModal() {
@@ -1739,6 +1813,7 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
         weight: $("pWeight").value,
         description: $("pDesc").value.trim(),
         enabled: $("pEnabled").checked,
+        categoryId: $("pCategory").value === "__new" ? "" : $("pCategory").value,
       };
     }
 
@@ -1776,6 +1851,10 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
       EDIT_ID = null;
       ["pName", "pPrice", "pSku", "pQty", "pWeight", "pDesc"].forEach((id) => ($(id).value = ""));
       $("pEnabled").checked = true;
+      $("pCategory").value = "";
+      $("styleSource").value = "";
+      $("descPreview").style.display = "none";
+      $("styleMsg").className = "msg";
       $("pImage").value = "";
       $("pImage").dataset.currentUrl = "";
       $("pKeepMain").checked = false;
@@ -1794,8 +1873,12 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
       $("pSku").value = p.sku || "";
       $("pQty").value = p.unlimited ? "" : (p.quantity ?? "");
       $("pWeight").value = p.weight ?? "";
-      $("pDesc").value = (p.description || "").replace(/<[^>]*>/g, "").trim();
+      $("pDesc").value = (p.description || "").trim();
       $("pEnabled").checked = !!p.enabled;
+      $("pCategory").value = String(p.defaultCategoryId || (p.categoryIds || [])[0] || "");
+      $("styleSource").value = "";
+      $("descPreview").style.display = "none";
+      $("styleMsg").className = "msg";
       $("pImage").value = "";
       $("pImage").dataset.currentUrl = p.imageUrl || "";
       $("pKeepMain").checked = !!p.imageUrl;   // default: don't clobber an existing photo
@@ -1809,6 +1892,58 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
     window.editProduct = editProduct;
 
     $("cancelEditBtn").addEventListener("click", resetProductForm);
+
+    // Creating a category from inside the product form
+    $("pCategory").addEventListener("change", function () {
+      if (this.value === "__new") handleNewCategory(this, "");
+    });
+
+    // ---- borrow another product page's description layout ----
+    function paintStyleSources() {
+      $("styleSourceList").innerHTML = PRODUCTS
+        .filter((p) => (p.description || "").trim())
+        .slice(0, 400)
+        .map((p) => `<option value="${esc(p.name)}"></option>`)
+        .join("");
+    }
+
+    $("styleApplyBtn").addEventListener("click", async function () {
+      const typed = $("styleSource").value.trim().toLowerCase();
+      const source = PRODUCTS.find((p) => (p.name || "").toLowerCase() === typed) ||
+        PRODUCTS.find((p) => (p.name || "").toLowerCase().includes(typed) && (p.description || "").trim());
+      if (!typed || !source) {
+        showMsg("styleMsg", "Pick a product to copy the styling from — start typing and choose one from the list.", false);
+        return;
+      }
+      if (!$("pName").value.trim() && !$("pDesc").value.trim()) {
+        showMsg("styleMsg", "Add the product name (or some rough notes) first, so there's something to write about.", false);
+        return;
+      }
+      this.disabled = true;
+      this.innerHTML = '<span class="spin"></span>Matching…';
+      try {
+        const out = await adminApi("/admin/api/products/style-description", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceId: source.id, name: $("pName").value.trim(), content: $("pDesc").value.trim() }),
+        });
+        $("pDesc").value = out.html;
+        showMsg("styleMsg", `Written in the same layout as "${out.styledAfter}". Edit it however you like — nothing saves until you hit the button below.`, true);
+        showDescPreview(true);
+      } catch (e) { showMsg("styleMsg", e.message, false); }
+      this.disabled = false;
+      this.textContent = "Match Styling";
+    });
+
+    function showDescPreview(on) {
+      const box = $("descPreview");
+      if (!on) { box.style.display = "none"; $("descPreviewBtn").textContent = "Preview"; return; }
+      box.innerHTML = $("pDesc").value || '<span class="note">Nothing to preview yet.</span>';
+      box.style.display = "block";
+      $("descPreviewBtn").textContent = "Hide Preview";
+    }
+    $("descPreviewBtn").addEventListener("click", () =>
+      showDescPreview($("descPreview").style.display === "none"));
+
     $("pImage").addEventListener("change", renderPhotoPreviews);
     $("pKeepMain").addEventListener("change", renderPhotoPreviews);
 
@@ -1910,19 +2045,83 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
           if (!PRODUCTS.some((p) => String(p.id) === id)) SELECTED.delete(id);
         });
         renderProducts();
+        paintStyleSources();
       } catch (e) {
-        $("prodBody").innerHTML = `<tr><td colspan="8" style="color:var(--red);">${esc(e.message)}</td></tr>`;
+        $("prodBody").innerHTML = `<tr><td colspan="9" style="color:var(--red);">${esc(e.message)}</td></tr>`;
       }
+    }
+
+    function categoryOptions(selectedId, opts = {}) {
+      const sel = String(selectedId ?? "");
+      return `<option value=""${sel ? "" : " selected"}>${opts.blank || "— none —"}</option>` +
+        CATEGORIES.map((c) =>
+          `<option value="${esc(String(c.id))}"${String(c.id) === sel ? " selected" : ""}>${esc(c.name)}</option>`).join("") +
+        (opts.allowNew ? '<option value="__new">＋ Create a new category…</option>' : "");
+    }
+
+    function paintCategoryPickers() {
+      $("bulkCategory").innerHTML = '<option value="">Move to category…</option>' +
+        CATEGORIES.map((c) => `<option value="${esc(String(c.id))}">${esc(c.name)}</option>`).join("");
+      const keep = $("pCategory").value;
+      $("pCategory").innerHTML = categoryOptions(keep, { allowNew: true, blank: "— no category —" });
     }
 
     async function loadCategories() {
       try {
         const d = await adminApi("/admin/api/categories");
         CATEGORIES = d.categories || [];
-        $("bulkCategory").innerHTML = '<option value="">Move to category…</option>' +
-          CATEGORIES.map((c) => `<option value="${esc(String(c.id))}">${esc(c.name)}</option>`).join("");
-      } catch { /* categories are optional — the other bulk actions still work */ }
+        paintCategoryPickers();
+        renderProducts();
+      } catch { /* categories are optional — everything else still works */ }
     }
+
+    // Picking "create a new category" makes one in Ecwid there and then.
+    async function handleNewCategory(select, afterId) {
+      const name = prompt("Name the new category:");
+      if (!name || !name.trim()) { select.value = afterId || ""; return null; }
+      try {
+        const out = await adminApi("/admin/api/categories", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim() }),
+        });
+        CATEGORIES.push(out.category);
+        CATEGORIES.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        paintCategoryPickers();
+        select.value = String(out.category.id);
+        return out.category;
+      } catch (e) {
+        showMsg("addMsg", e.message, false);
+        select.value = afterId || "";
+        return null;
+      }
+    }
+
+    // The dropdown on each row moves that one product.
+    async function changeRowCategory(select) {
+      const id = select.dataset.id;
+      const categoryId = select.value;
+      const product = PRODUCTS.find((x) => String(x.id) === String(id));
+      const previous = String(product?.defaultCategoryId || (product?.categoryIds || [])[0] || "");
+      select.disabled = true;
+      try {
+        await adminApi(`/admin/api/products/${encodeURIComponent(id)}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryId }),
+        });
+        if (product) {
+          product.defaultCategoryId = categoryId ? Number(categoryId) : null;
+          product.categoryIds = categoryId ? [Number(categoryId)] : [];
+        }
+        const label = CATEGORIES.find((c) => String(c.id) === categoryId);
+        showMsg("toggleMsg",
+          `${product ? product.name : "Product"} ${label ? `moved to ${label.name}` : "removed from its category"}.`, true);
+      } catch (e) {
+        select.value = previous;
+        showMsg("toggleMsg", e.message, false);
+      }
+      select.disabled = false;
+    }
+    window.changeRowCategory = changeRowCategory;
 
     function productRow(p) {
       const checked = SELECTED.has(String(p.id)) ? "checked" : "";
@@ -1932,7 +2131,15 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
           <td>${p.imageUrl
             ? `<img src="${esc(p.imageUrl)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />`
             : '<div style="width:46px;height:46px;border-radius:6px;border:1px dashed var(--border);background:#fafafa;" title="No photo in Ecwid"></div>'}</td>
-          <td>${esc(p.name)}</td>
+          <td>
+            ${esc(p.name)}
+            ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="page-link" title="Open this product's page on the website">↗</a>` : ""}
+          </td>
+          <td>
+            <select class="field row-cat" data-id="${esc(String(p.id))}" onchange="changeRowCategory(this)">
+              ${categoryOptions(p.defaultCategoryId || (p.categoryIds || [])[0])}
+            </select>
+          </td>
           <td>${esc(p.sku || "—")}</td>
           <td>${money2(p.price)}</td>
           <td>${p.unlimited ? "∞" : (p.quantity ?? "—")}</td>
@@ -1956,10 +2163,10 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
 
       $("prodBody").innerHTML = live.length
         ? live.map(productRow).join("")
-        : `<tr><td colspan="8" class="empty-note">${q ? "No live products match that search." : "No live products."}</td></tr>`;
+        : `<tr><td colspan="9" class="empty-note">${q ? "No live products match that search." : "No live products."}</td></tr>`;
       $("hiddenBody").innerHTML = hidden.length
         ? hidden.map(productRow).join("")
-        : `<tr><td colspan="8" class="empty-note">${q ? "No hidden products match that search." : "Nothing hidden."}</td></tr>`;
+        : `<tr><td colspan="9" class="empty-note">${q ? "No hidden products match that search." : "Nothing hidden."}</td></tr>`;
 
       const totalLive = PRODUCTS.filter((p) => p.enabled).length;
       $("prodCount").textContent =
@@ -2324,7 +2531,7 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
         if (cfg.signedIn) loadAdminData();
         // deep link: /admin redirects to /#adminProducts
         if (cfg.signedIn && location.hash.startsWith("#admin")) showTab(location.hash.slice(1));
-      } catch { $("ownerBtn").style.display = "none"; }
+      } catch { $("ownerBtn").style.display = "none"; $("ecomDropdown").style.display = "none"; }
     })();
 
     load();
