@@ -54,6 +54,10 @@ const {
   OPENAI_MODEL = "gpt-4o-mini",
   ALLOWED_ORIGIN = "*",
   CACHE_SECONDS = "300",
+  ADMIN_PASSWORD = "",
+  ADMIN_SESSION_SECRET = "",
+  AUTO_RECOVERY = "false",
+  AUTO_RECOVERY_COUPON = "",
   MOCK_MODE = "false",
   PORT = 10000,
 } = process.env;
@@ -158,6 +162,27 @@ async function ecwidGet(endpoint, params = {}) {
     return null;
   }
   return resp.json();
+}
+
+async function ecwidWrite(method, endpoint, body) {
+  const resp = await fetch(`${ECWID_BASE}${endpoint}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${ECWID_API_TOKEN}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text().catch(() => "");
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`Ecwid API ${resp.status}: ${(data.errorMessage || text).slice(0, 300)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
 }
 
 async function ecwidPageAll(endpoint) {
@@ -354,6 +379,26 @@ async function ghlGet(pathName) {
     throw err;
   }
   return resp.json();
+}
+
+async function ghlPost(pathName, body, version = GHL_VERSION) {
+  const resp = await fetch(`${GHL_BASE}${pathName}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GHL_PIT}`, Version: version,
+      Accept: "application/json", "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text().catch(() => "");
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`GHL API ${resp.status}: ${(data.message || text).toString().slice(0, 250)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
 }
 
 const shortKey = (fk) => String(fk || "").split(".").pop().toLowerCase();
@@ -1203,7 +1248,7 @@ function mockSocial() {
   };
 }
 
-// ================================================================ ROUTES
+// Wrap async route handlers with JSON error handling
 const safe = (fn) => async (req, res) => {
   try {
     res.json(await fn(req));
@@ -1213,6 +1258,504 @@ const safe = (fn) => async (req, res) => {
   }
 };
 
+// ================================================================ ADMIN (owner-only)
+// Password-protected pages: add a product, toggle products on/off, and a
+// monthly sales + state/local tax report — all through the Ecwid API.
+// Enable by setting ADMIN_PASSWORD. There is no link to /admin from the
+// dashboard; share the URL only with people who should have it.
+
+const ADMIN_SECRET = ADMIN_SESSION_SECRET || ADMIN_PASSWORD || "disabled";
+const ADMIN_COOKIE = "s1admin";
+const ADMIN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+const signExp = (exp) =>
+  crypto.createHmac("sha256", ADMIN_SECRET).update(String(exp)).digest("hex");
+
+function isAdminRequest(req) {
+  const cookies = Object.fromEntries(
+    (req.headers.cookie || "").split(";").map((c) => {
+      const i = c.indexOf("=");
+      return [c.slice(0, i).trim(), c.slice(i + 1).trim()];
+    })
+  );
+  const val = cookies[ADMIN_COOKIE];
+  if (!val) return false;
+  const [exp, sig] = val.split(".");
+  if (!exp || !sig || Number(exp) < Date.now()) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signExp(exp)), Buffer.from(sig));
+  } catch { return false; }
+}
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_PASSWORD) return res.status(404).json({ error: "Admin area not enabled (set ADMIN_PASSWORD)." });
+  if (!isAdminRequest(req)) return res.status(401).json({ error: "Not signed in." });
+  next();
+}
+
+app.get("/admin", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(404).send("Not found");
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+app.post("/admin/api/login", express.json(), (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(404).json({ error: "Admin area not enabled." });
+  const pw = String(req.body?.password || "");
+  const a = Buffer.from(pw);
+  const b = Buffer.from(ADMIN_PASSWORD);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!ok) return res.status(401).json({ error: "Wrong password." });
+  const exp = Date.now() + ADMIN_TTL_MS;
+  const secure = req.headers["x-forwarded-proto"] === "https" || req.secure ? " Secure;" : "";
+  res.setHeader("Set-Cookie",
+    `${ADMIN_COOKIE}=${exp}.${signExp(exp)}; HttpOnly;${secure} SameSite=Lax; Path=/; Max-Age=${Math.floor(ADMIN_TTL_MS / 1000)}`);
+  res.json({ ok: true });
+});
+
+app.get("/admin/api/session", (req, res) =>
+  res.json({ signedIn: !!ADMIN_PASSWORD && isAdminRequest(req), enabled: !!ADMIN_PASSWORD, mock: MOCK }));
+
+// ---- Products: list + toggle ----
+let mockProductList = null;
+function getMockProducts() {
+  if (!mockProductList) {
+    mockProductList = [
+      { id: 101, name: "Bahama Mama Sausages (4-pack)", sku: "BM-4PK", price: 24.0, enabled: true, quantity: 120, unlimited: false },
+      { id: 102, name: "Jumbo Cream Puff Kit", sku: "CP-KIT", price: 29.0, enabled: true, quantity: 45, unlimited: false },
+      { id: 103, name: "German Potato Salad (Family Size)", sku: "GPS-FAM", price: 19.0, enabled: true, quantity: 0, unlimited: true },
+      { id: 104, name: "Sauerkraut Balls (Frozen, 24ct)", sku: "SKB-24", price: 18.0, enabled: false, quantity: 60, unlimited: false },
+      { id: 105, name: "Schmidt's Signature Mustard", sku: "MUST-01", price: 8.95, enabled: true, quantity: 300, unlimited: false },
+    ];
+  }
+  return mockProductList;
+}
+
+app.get("/admin/api/products", requireAdmin, safe(async () => {
+  if (MOCK) return { products: getMockProducts(), mock: true };
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+  const items = await ecwidPageAll("/products");
+  return {
+    products: items.map((p) => ({
+      id: p.id, name: p.name, sku: p.sku, price: p.price,
+      enabled: p.enabled, quantity: p.quantity, unlimited: p.unlimited,
+    })),
+  };
+}));
+
+app.put("/admin/api/products/:id/enabled", requireAdmin, express.json(), safe(async (req) => {
+  const id = req.params.id;
+  const enabled = !!req.body?.enabled;
+  if (MOCK) {
+    const p = getMockProducts().find((x) => String(x.id) === String(id));
+    if (p) p.enabled = enabled;
+    return { ok: true, id, enabled, mock: true };
+  }
+  await ecwidWrite("PUT", `/products/${encodeURIComponent(id)}`, { enabled });
+  simpleCache.delete("ecwid");
+  return { ok: true, id, enabled };
+}));
+
+// ---- Add a product ----
+app.post("/admin/api/products", requireAdmin, express.json(), safe(async (req) => {
+  const b = req.body || {};
+  if (!b.name || b.price === undefined || b.price === "")
+    throw Object.assign(new Error("Name and price are required."), { status: 400 });
+  const product = {
+    name: String(b.name).slice(0, 255),
+    price: Number(b.price),
+    enabled: b.enabled !== false,
+  };
+  if (b.sku) product.sku = String(b.sku).slice(0, 64);
+  if (b.description) product.description = String(b.description);
+  if (b.weight !== undefined && b.weight !== "") product.weight = Number(b.weight);
+  if (b.quantity !== undefined && b.quantity !== "") {
+    product.quantity = parseInt(b.quantity, 10);
+    product.unlimited = false;
+  } else {
+    product.unlimited = true;
+  }
+  if (MOCK) {
+    const p = { id: Math.floor(Math.random() * 0 + Date.now() % 100000), ...product };
+    getMockProducts().unshift(p);
+    return { ok: true, product: p, mock: true };
+  }
+  const created = await ecwidWrite("POST", "/products", product);
+  simpleCache.delete("ecwid");
+  return { ok: true, product: { id: created.id, ...product } };
+}));
+
+// ---- Monthly sales + state/local tax breakdown ----
+function classifyTaxName(name) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("state")) return "State";
+  if (n.includes("county") || n.includes("city") || n.includes("local") ||
+      n.includes("municipal") || n.includes("district") || n.includes("transit")) return "Local";
+  return "Other";
+}
+
+app.get("/admin/api/sales", requireAdmin, safe(async (req) => {
+  const month = String(req.query.month || "").match(/^(\d{4})-(\d{2})$/);
+  const now = new Date();
+  const y = month ? Number(month[1]) : now.getFullYear();
+  const m = month ? Number(month[2]) - 1 : now.getMonth();
+  const start = new Date(y, m, 1);
+  const end = new Date(y, m + 1, 1);
+  const label = start.toLocaleString("en-US", { month: "long", year: "numeric" });
+
+  if (MOCK) {
+    const day = (n) => new Date(y, m, n).toISOString();
+    return {
+      month: label,
+      counted: { PAID: 58, PARTIALLY_REFUNDED: 1 },
+      excluded: { AWAITING_PAYMENT: 3, CANCELLED: 2, REFUNDED: 1 },
+      orders: 59, grossSales: 6240.75, subtotal: 5480.2, shipping: 512.4, discounts: 231.85, totalTax: 462.15,
+      taxes: [
+        { name: "OH State Tax", type: "State", amount: 316.4, orders: 59 },
+        { name: "Franklin County Tax", type: "Local", amount: 98.55, orders: 52 },
+        { name: "COTA Transit Tax", type: "Local", amount: 47.2, orders: 52 },
+      ],
+      orderRows: [
+        { order: "10241", date: day(2), customer: "amy@example.com", subtotal: 86.5, shipping: 12.95, discount: 0, tax: 7.79, total: 107.24, status: "PAID" },
+        { order: "10242", date: day(5), customer: "jake@example.com", subtotal: 145.0, shipping: 0, discount: 21.75, tax: 9.63, total: 132.88, status: "PAID" },
+        { order: "10243", date: day(11), customer: "maria@example.com", subtotal: 29.0, shipping: 8.5, discount: 0, tax: 2.93, total: 40.43, status: "PAID" },
+        { order: "10244", date: day(17), customer: "sam@example.com", subtotal: 212.4, shipping: 18.0, discount: 0, tax: 18.02, total: 248.42, status: "PARTIALLY_REFUNDED" },
+      ],
+      mock: true,
+    };
+  }
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+
+  const orders = await ecwidPageAll("/orders");
+  const COUNTED = new Set(["PAID", "PARTIALLY_REFUNDED"]);
+  const counted = {}, excluded = {};
+  const inMonth = orders.filter((o) => {
+    const d = new Date(o.createDate);
+    return d >= start && d < end;
+  });
+  const kept = [];
+  for (const o of inMonth) {
+    const st = o.paymentStatus || "UNKNOWN";
+    if (COUNTED.has(st)) { counted[st] = (counted[st] || 0) + 1; kept.push(o); }
+    else excluded[st] = (excluded[st] || 0) + 1;
+  }
+
+  let grossSales = 0, subtotal = 0, shipping = 0, discounts = 0, totalTax = 0;
+  const taxMap = new Map(); // name -> { amount, orders:Set }
+  const orderRows = [];
+  for (const o of kept) {
+    const oShipping = o.shippingOption?.shippingRate || 0;
+    const oDiscount = (o.discount || 0) + (o.couponDiscount || 0) + (o.volumeDiscount || 0);
+    const oItemTax = (o.items || []).reduce(
+      (s, i) => s + (i.taxes || []).reduce((s2, t) => s2 + (t.total || 0), 0), 0);
+    const oTax = typeof o.tax === "number" ? o.tax : oItemTax;
+    grossSales += o.total || 0;
+    subtotal += o.subtotal || 0;
+    shipping += oShipping;
+    discounts += oDiscount;
+    if (typeof o.tax === "number") totalTax += o.tax;
+    orderRows.push({
+      order: String(o.orderNumber || o.vendorOrderNumber || o.id || ""),
+      date: o.createDate,
+      customer: o.email || o.billingPerson?.name || "",
+      subtotal: o.subtotal || 0,
+      shipping: oShipping,
+      discount: oDiscount,
+      tax: oTax,
+      total: o.total || 0,
+      status: o.paymentStatus || "",
+    });
+
+    const addTax = (name, amount) => {
+      if (!amount) return;
+      const key = name || "Tax";
+      const t = taxMap.get(key) || { amount: 0, orders: new Set() };
+      t.amount += amount;
+      t.orders.add(o.id);
+      taxMap.set(key, t);
+    };
+    for (const item of o.items || []) {
+      for (const t of item.taxes || []) addTax(t.name, t.total || 0);
+    }
+    // shipping-level taxes, if itemized on the order
+    for (const t of o.taxesOnShipping || []) {
+      if (t && typeof t === "object") addTax(t.name, t.total || 0);
+    }
+  }
+  // If the order-level tax field wasn't present, fall back to the itemized sum
+  const itemizedTotal = [...taxMap.values()].reduce((s, t) => s + t.amount, 0);
+  if (!totalTax || totalTax < itemizedTotal * 0.5) totalTax = itemizedTotal;
+
+  orderRows.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return {
+    month: label,
+    counted, excluded,
+    orders: kept.length,
+    grossSales, subtotal, shipping, discounts, totalTax,
+    taxes: [...taxMap.entries()]
+      .map(([name, t]) => ({ name, type: classifyTaxName(name), amount: Number(t.amount.toFixed(2)), orders: t.orders.size }))
+      .sort((a, b) => b.amount - a.amount),
+    orderRows,
+  };
+}));
+
+// ---- Discount codes (Ecwid coupons) ----
+let mockCoupons = null;
+function getMockCoupons() {
+  if (!mockCoupons) {
+    mockCoupons = [
+      { id: 1, name: "Bahama Mama Summer", code: "BAHAMA15", discountType: "PERCENT", discount: 15, status: "ACTIVE", usesLimit: "UNLIMITED", orderCount: 34, expirationDate: "2026-08-16 23:59:59" },
+      { id: 2, name: "Free Shipping September", code: "SHIPFREE", discountType: "SHIPPING", discount: 0, status: "PAUSED", usesLimit: "ONE_PER_CUSTOMER", orderCount: 0, expirationDate: "" },
+    ];
+  }
+  return mockCoupons;
+}
+
+app.get("/admin/api/coupons", requireAdmin, safe(async () => {
+  if (MOCK) return { coupons: getMockCoupons(), mock: true };
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+  const items = await ecwidPageAll("/discount_coupons");
+  return {
+    coupons: items.map((c) => ({
+      id: c.id, name: c.name, code: c.code, discountType: c.discountType,
+      discount: c.discount, status: c.status, usesLimit: c.usesLimit,
+      orderCount: c.orderCount, launchDate: c.launchDate, expirationDate: c.expirationDate,
+      repeatCustomerOnly: c.repeatCustomerOnly,
+    })),
+  };
+}));
+
+app.post("/admin/api/coupons", requireAdmin, express.json(), safe(async (req) => {
+  const b = req.body || {};
+  if (!b.name || !b.code) throw Object.assign(new Error("Name and code are required."), { status: 400 });
+  const TYPES = ["PERCENT", "ABS", "SHIPPING", "PERCENT_AND_SHIPPING", "ABS_AND_SHIPPING"];
+  const coupon = {
+    name: String(b.name).slice(0, 128),
+    code: String(b.code).toUpperCase().replace(/\s+/g, ""),
+    discountType: TYPES.includes(b.discountType) ? b.discountType : "PERCENT",
+    status: "ACTIVE",
+    usesLimit: ["UNLIMITED", "ONE_PER_CUSTOMER", "SINGLE"].includes(b.usesLimit) ? b.usesLimit : "UNLIMITED",
+    repeatCustomerOnly: !!b.repeatCustomerOnly,
+  };
+  if (coupon.discountType !== "SHIPPING") coupon.discount = Number(b.discount || 0);
+  if (b.launchDate) coupon.launchDate = `${b.launchDate} 00:00:00`;
+  if (b.expirationDate) coupon.expirationDate = `${b.expirationDate} 23:59:59`;
+  if (MOCK) {
+    const c = { id: Date.now() % 100000, orderCount: 0, ...coupon };
+    getMockCoupons().unshift(c);
+    return { ok: true, coupon: c, mock: true };
+  }
+  const created = await ecwidWrite("POST", "/discount_coupons", coupon);
+  return { ok: true, coupon: { id: created.id, ...coupon } };
+}));
+
+// ---- Abandoned carts + AI-drafted recovery emails ----
+// Note: the Ecwid API exposes abandoned carts but cannot send email itself.
+// This drafts the email (tone based on cart age + recovery status); Todd
+// sends it via mailto/copy. Ecwid's own automatic recovery email is a store
+// setting, separate from this.
+function cartTier(daysOld) {
+  if (daysOld < 2) return { tier: "New", tone: "a warm, friendly reminder — no discount, just helpfulness and a nudge that their items are waiting" };
+  if (daysOld < 7) return { tier: "Warm", tone: "a helpful follow-up that sweetens the deal — mention the discount code if one is provided" };
+  return { tier: "Cold", tone: "a last-chance note with gentle urgency — their cart may expire; lead with the discount code if one is provided" };
+}
+
+async function fetchAbandonedCarts() {
+  if (MOCK) {
+    const d = (days) => new Date(Date.now() - days * 86400000).toISOString();
+    return [
+      { cartId: "mock-a1", email: "amy@example.com", name: "Amy R.", total: 86.5, createDate: d(1), items: [{ name: "Bahama Mama Sausages (4-pack)", quantity: 2 }, { name: "Schmidt's Signature Mustard", quantity: 1 }] },
+      { cartId: "mock-b2", email: "jake@example.com", name: "Jake T.", total: 145.0, createDate: d(4), items: [{ name: "Oktoberfest Party Platter", quantity: 1 }] },
+      { cartId: "mock-c3", email: "maria@example.com", name: "", total: 29.0, createDate: d(9), items: [{ name: "Jumbo Cream Puff Kit", quantity: 1 }] },
+    ];
+  }
+  if (!ECWID_API_TOKEN) throw new Error("ECWID_API_TOKEN not configured");
+  const items = await ecwidPageAll("/abandoned_sales");
+  return items.map((c) => ({
+    cartId: c.cartId || c.id,
+    email: c.email || c.customerEmail || "",
+    name: [c.billingPerson?.name, c.shippingPerson?.name].find(Boolean) || "",
+    total: c.total || c.cartValue || 0,
+    createDate: c.createDate,
+    items: (c.items || c.orderItems || []).map((i) => ({ name: i.name, quantity: i.quantity })),
+  }));
+}
+
+app.get("/admin/api/abandoned", requireAdmin, safe(async () => {
+  const carts = await fetchAbandonedCarts();
+  const now = Date.now();
+  return {
+    carts: carts
+      .map((c) => {
+        const daysOld = Math.max(0, Math.floor((now - new Date(c.createDate)) / 86400000));
+        return { ...c, daysOld, tier: cartTier(daysOld).tier };
+      })
+      .sort((a, b) => a.daysOld - b.daysOld),
+    mock: MOCK,
+  };
+}));
+
+async function buildRecoveryDraft(cart, couponCode) {
+  const daysOld = Math.max(0, Math.floor((Date.now() - new Date(cart.createDate)) / 86400000));
+  const { tier, tone } = cartTier(daysOld);
+  const firstName = (cart.name || "").split(" ")[0] || "there";
+  const itemList = (cart.items || []).map((i) => `${i.quantity}x ${i.name}`).join(", ");
+
+  // Fallback template (used when OpenAI is unavailable)
+  const fallback = () => {
+    const codeLine = couponCode ? `\n\nUse code ${couponCode} at checkout for a little something extra on us.` : "";
+    if (tier === "New") return {
+      subject: "Your Schmidt's order is waiting for you",
+      body: `Hi ${firstName},\n\nLooks like you left some goodies behind — ${itemList} are still in your cart at schmidthaus.com.\n\nYour cart is saved and ready whenever you are. If you hit a snag checking out, just reply and we'll help.${codeLine}\n\nDanke schön,\nSchmidt's Sausage Haus`,
+    };
+    if (tier === "Warm") return {
+      subject: "Still thinking it over? Your Schmidt's cart is saved",
+      body: `Hi ${firstName},\n\nYour cart with ${itemList} ($${cart.total.toFixed(2)}) is still saved at schmidthaus.com.${codeLine}\n\nOur Bahama Mamas don't stay on shelves long — finish your order while everything's still in stock.\n\nProst,\nSchmidt's Sausage Haus`,
+    };
+    return {
+      subject: "Last call — your Schmidt's cart is about to expire",
+      body: `Hi ${firstName},\n\nJust a heads-up: the cart you started at schmidthaus.com (${itemList}) will expire soon.${codeLine}\n\nIf you'd still like your order, now's the time — after that we can't guarantee the items or the price.\n\nWe'd love to get some Schmidt's on your table,\nSchmidt's Sausage Haus`,
+    };
+  };
+
+  if (MOCK || !OPENAI_API_KEY) return { ...fallback(), tier, daysOld, generatedBy: "template" };
+
+  try {
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: "You write short, warm cart-recovery emails for Schmidt's Sausage Haus (schmidthaus.com), a family-owned German restaurant and online store in Columbus, Ohio. Plain text only, no HTML, no placeholders like [Name]. Sign off as Schmidt's Sausage Haus. Respond ONLY with JSON: {\"subject\":\"\",\"body\":\"\"}." },
+          { role: "user", content: `Write a cart recovery email.\nCustomer first name: ${firstName}\nCart items: ${itemList}\nCart value: $${cart.total.toFixed(2)}\nCart age: ${daysOld} day(s) — tone: ${tone}\n${couponCode ? `Discount code to include: ${couponCode}` : "No discount code — do not invent one."}\nKeep it under 130 words.` },
+        ],
+      }),
+    });
+    if (!resp.ok) throw new Error(`OpenAI ${resp.status}`);
+    const data = await resp.json();
+    const parsed = JSON.parse(data.choices[0].message.content);
+    if (!parsed.subject || !parsed.body) throw new Error("bad JSON");
+    return { subject: parsed.subject, body: parsed.body, tier, daysOld, generatedBy: OPENAI_MODEL };
+  } catch (e) {
+    console.error("Draft fallback:", e.message);
+    return { ...fallback(), tier, daysOld, generatedBy: "template" };
+  }
+}
+
+async function findCartOr404(cartId) {
+  const carts = await fetchAbandonedCarts();
+  const cart = carts.find((c) => String(c.cartId) === String(cartId));
+  if (!cart) throw Object.assign(new Error("Cart not found."), { status: 404 });
+  return cart;
+}
+
+app.post("/admin/api/abandoned/draft", requireAdmin, express.json(), safe(async (req) => {
+  const { cartId, couponCode } = req.body || {};
+  const cart = await findCartOr404(cartId);
+  return buildRecoveryDraft(cart, couponCode);
+}));
+
+// ---- Send the recovery email through Smart 1 Suite (GHL) ----
+// Upserts the contact, sends via the Conversations API, then tags the contact
+// (cart-recovery-<cartId>-<tier>) so the same cart never gets the same-stage
+// email twice. Requires PIT scopes: contacts.write + conversations/message.write.
+const recoveryTag = (cartId, tier) =>
+  `cart-recovery-${String(cartId).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24)}-${tier.toLowerCase()}`;
+
+async function sendRecoveryEmail(cart, subject, body, tier) {
+  if (!cart.email) throw new Error("This cart has no email address.");
+  if (MOCK) return { ok: true, mock: true, contactId: "mock-contact", tag: recoveryTag(cart.cartId, tier) };
+  if (!GHL_PIT) throw new Error("GHL_PIT not configured");
+
+  const [firstName, ...rest] = (cart.name || "").split(" ");
+  const up = await ghlPost("/contacts/upsert", {
+    locationId: GHL_LOCATION_ID,
+    email: cart.email,
+    ...(firstName ? { firstName, lastName: rest.join(" ") || undefined } : {}),
+  });
+  const contact = up.contact || up;
+  const contactId = contact.id;
+  if (!contactId) throw new Error("GHL did not return a contact id.");
+
+  const tag = recoveryTag(cart.cartId, tier);
+  const existingTags = (contact.tags || []).map((t) => String(t).toLowerCase());
+  if (existingTags.includes(tag)) {
+    return { ok: false, alreadySent: true, contactId, tag };
+  }
+
+  const html = String(body).split("\n").map((l) => l || "&nbsp;").join("<br>");
+  await ghlPost("/conversations/messages", {
+    type: "Email",
+    contactId,
+    subject,
+    html,
+    emailTo: cart.email,
+  }, "2021-04-15");
+
+  await ghlPost(`/contacts/${encodeURIComponent(contactId)}/tags`, { tags: [tag] }).catch((e) =>
+    console.error("Tagging failed (email WAS sent):", e.message));
+
+  return { ok: true, contactId, tag };
+}
+
+app.post("/admin/api/abandoned/send", requireAdmin, express.json(), safe(async (req) => {
+  const { cartId, subject, body } = req.body || {};
+  if (!subject || !body) throw Object.assign(new Error("Subject and body are required."), { status: 400 });
+  const cart = await findCartOr404(cartId);
+  const daysOld = Math.max(0, Math.floor((Date.now() - new Date(cart.createDate)) / 86400000));
+  const { tier } = cartTier(daysOld);
+  const result = await sendRecoveryEmail(cart, subject, body, tier);
+  if (result.alreadySent) {
+    return { ok: false, message: `A ${tier} recovery email was already sent for this cart — not sending again.` };
+  }
+  return { ok: true, message: `Email sent to ${cart.email} through Smart 1 Suite${result.mock ? " (sample mode — nothing actually sent)" : ""}.` };
+}));
+
+// ---- Fully automatic recovery (optional) ----
+// AUTO_RECOVERY=true: every 6 hours, scan abandoned carts and send the
+// stage-appropriate email for any cart that hasn't had that stage yet
+// (deduped via contact tags, so restarts/redeploys can't double-send).
+// AUTO_RECOVERY_COUPON optionally names a discount code to include in
+// Warm/Cold emails. Carts older than 30 days are left alone.
+const AUTO = String(AUTO_RECOVERY).toLowerCase() === "true";
+
+async function autoRecoveryRun() {
+  try {
+    const carts = await fetchAbandonedCarts();
+    let sent = 0, skipped = 0;
+    for (const cart of carts) {
+      if (!cart.email) continue;
+      const daysOld = Math.max(0, Math.floor((Date.now() - new Date(cart.createDate)) / 86400000));
+      if (daysOld > 30) continue;
+      const { tier } = cartTier(daysOld);
+      const coupon = tier === "New" ? "" : AUTO_RECOVERY_COUPON;
+      try {
+        const draft = await buildRecoveryDraft(cart, coupon || undefined);
+        const result = await sendRecoveryEmail(cart, draft.subject, draft.body, tier);
+        if (result.ok) { sent++; console.log(`Auto-recovery: sent ${tier} email to ${cart.email} (cart ${cart.cartId})`); }
+        else skipped++;
+      } catch (e) {
+        console.error(`Auto-recovery failed for cart ${cart.cartId}: ${e.message}`);
+      }
+    }
+    if (sent || skipped) console.log(`Auto-recovery run: ${sent} sent, ${skipped} already covered.`);
+  } catch (e) {
+    console.error("Auto-recovery run failed:", e.message);
+  }
+}
+
+if (AUTO && !MOCK) {
+  setTimeout(autoRecoveryRun, 60 * 1000);              // first pass 1 min after boot
+  setInterval(autoRecoveryRun, 6 * 60 * 60 * 1000);    // then every 6 hours
+}
+
+app.get("/admin/api/recovery-status", requireAdmin, (req, res) =>
+  res.json({ auto: AUTO, coupon: AUTO_RECOVERY_COUPON || null, mock: MOCK }));
+
+// ================================================================ ROUTES
 app.get("/health", (req, res) =>
   res.json({ status: "ok", mock: MOCK, timestamp: new Date().toISOString() })
 );

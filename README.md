@@ -55,6 +55,22 @@ MOCK_MODE=true npm start
 | `OPENAI_MODEL` | Optional, default `gpt-4o-mini` |
 | `MOCK_MODE` | `true` = sample data (demo), `false` = live |
 
+## Admin area (owner only)
+
+`/admin` is a password-protected page with three tools, all working through the
+Ecwid API: **Add Product** (name, price, SKU, stock, weight, description,
+visible on/off), **Products On / Off** (searchable list with live toggles), and
+**Sales & Tax** (pick a month → orders, gross sales, and tax collected broken
+down by jurisdiction, classified State / Local from the tax names configured
+in Ecwid; counts PAID and partially-refunded orders).
+
+Setup: set `ADMIN_PASSWORD` in Render (that's what enables the area — without
+it /admin 404s). Sign-in lasts 30 days per browser. There is no link to /admin
+from the dashboard; share the URL privately. IMPORTANT: adding/toggling
+products requires the Ecwid token to have **catalog write** access
+(`create_catalog`, `update_catalog`) — a read-only token will list products
+but fail to change them.
+
 ## Google Analytics auth
 
 Two ways to connect GA4 — set the env vars for ONE of them (if both are set,
