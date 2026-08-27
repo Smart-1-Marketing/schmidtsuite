@@ -3,7 +3,7 @@
  * ----------------------------------------------------------------------
  * One Express app that merges:
  *   1. Ecwid ecommerce dashboard   (was: schmidtdash-main)
- *   2. GoHighLevel promotions proxy (was: schmidtpromo-main)
+ *   2. Smart 1 Suite promotions proxy (was: schmidtpromo-main)
  *   3. Google Analytics 4 (GA4 Data API via service account)
  *   4. AI social-media holiday planner (OpenAI)
  *
@@ -13,7 +13,7 @@
  * Environment variables (see .env.example):
  *   ECWID_STORE_ID        Ecwid store id            (default 111281497)
  *   ECWID_API_TOKEN       Ecwid secret token        (required for live data)
- *   GHL_PIT               GoHighLevel Private Integration Token (pit-...)
+ *   GHL_PIT               Smart 1 Suite Private Integration Token (pit-...)
  *   GHL_LOCATION_ID       Sub-account id            (default EY0n2rtraCf6EEUKpaEE)
  *   PROMO_PIPELINE_NAME   default "Schmidt Marketing Projects"
  *   PROMO_STAGE_NAME      default "Upcoming Events"
@@ -376,7 +376,7 @@ async function getEcwidData() {
   });
 }
 
-// ================================================================ GHL PROMOTIONS
+// ====================================================== SMART 1 SUITE PROMOTIONS
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 
@@ -400,7 +400,7 @@ async function ghlGet(pathName) {
   });
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
-    const err = new Error(`GHL API ${resp.status}: ${body.slice(0, 200)}`);
+    const err = new Error(`Smart 1 Suite API ${resp.status}: ${body.slice(0, 200)}`);
     err.status = resp.status;
     throw err;
   }
@@ -420,7 +420,7 @@ async function ghlPost(pathName, body, version = GHL_VERSION) {
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   if (!resp.ok) {
-    const err = new Error(`GHL API ${resp.status}: ${(data.message || text).toString().slice(0, 250)}`);
+    const err = new Error(`Smart 1 Suite API ${resp.status}: ${(data.message || text).toString().slice(0, 250)}`);
     err.status = resp.status;
     throw err;
   }
@@ -526,7 +526,7 @@ function classifyPromo(startRaw, endRaw) {
 
 async function getPromotions() {
   if (MOCK) return mockPromotions();
-  if (!GHL_PIT) return { error: "GHL_PIT not configured", promotions: [] };
+  if (!GHL_PIT) return { error: "Smart 1 Suite is not configured", promotions: [] };
   const hit = cached("promos");
   if (hit) return hit;
 
@@ -567,7 +567,7 @@ async function getPromotions() {
   return remember("promos", { promotions, lastUpdated: new Date().toISOString() });
 }
 
-// ---------------- Lead counts from other GHL pipelines ----------------
+// ---------- Lead counts from other Smart 1 Suite pipelines ----------
 // Banquet House Request pipeline + combined Catering Menu Request /
 // Catering Requests pipelines, counted by opportunity createdAt per period.
 
@@ -590,7 +590,7 @@ async function fetchAllOppsForPipeline(pipelineId) {
 
 async function getLeads() {
   if (MOCK) return mockLeads();
-  if (!GHL_PIT) return { error: "GHL_PIT not configured" };
+  if (!GHL_PIT) return { error: "Smart 1 Suite is not configured" };
   const hit = cached("leads");
   if (hit) return hit;
 
@@ -1958,7 +1958,7 @@ app.post("/admin/api/abandoned/draft", requireAdmin, express.json(), safe(async 
   return buildRecoveryDraft(cart, couponCode);
 }));
 
-// ---- Send the recovery email through Smart 1 Suite (GHL) ----
+// ---- Send the recovery email through Smart 1 Suite ----
 // Upserts the contact, sends via the Conversations API, then tags the contact
 // (cart-recovery-<cartId>-<tier>) so the same cart never gets the same-stage
 // email twice. Requires PIT scopes: contacts.write + conversations/message.write.
@@ -1968,7 +1968,7 @@ const recoveryTag = (cartId, tier) =>
 async function sendRecoveryEmail(cart, subject, body, tier) {
   if (!cart.email) throw new Error("This cart has no email address.");
   if (MOCK) return { ok: true, mock: true, contactId: "mock-contact", tag: recoveryTag(cart.cartId, tier) };
-  if (!GHL_PIT) throw new Error("GHL_PIT not configured");
+  if (!GHL_PIT) throw new Error("Smart 1 Suite is not configured");
 
   const [firstName, ...rest] = (cart.name || "").split(" ");
   const up = await ghlPost("/contacts/upsert", {
@@ -1978,7 +1978,7 @@ async function sendRecoveryEmail(cart, subject, body, tier) {
   });
   const contact = up.contact || up;
   const contactId = contact.id;
-  if (!contactId) throw new Error("GHL did not return a contact id.");
+  if (!contactId) throw new Error("Smart 1 Suite did not return a contact id.");
 
   const tag = recoveryTag(cart.cartId, tier);
   const existingTags = (contact.tags || []).map((t) => String(t).toLowerCase());
@@ -2165,7 +2165,7 @@ app.get("/api/all", safe(async () => {
 
 // Diagnostics carried over from the promo proxy
 app.get("/api/pipelines", safe(async () => {
-  if (!GHL_PIT) throw new Error("GHL_PIT not configured");
+  if (!GHL_PIT) throw new Error("Smart 1 Suite is not configured");
   const data = await ghlGet(`/opportunities/pipelines?locationId=${encodeURIComponent(GHL_LOCATION_ID)}`);
   return {
     chosenScope: await resolvePromoScope(),
@@ -2178,7 +2178,7 @@ app.get("/api/pipelines", safe(async () => {
 }));
 
 app.get("/api/custom-fields", safe(async () => {
-  if (!GHL_PIT) throw new Error("GHL_PIT not configured");
+  if (!GHL_PIT) throw new Error("Smart 1 Suite is not configured");
   const data = await ghlGet(`/locations/${encodeURIComponent(GHL_LOCATION_ID)}/customFields?model=opportunity`);
   return {
     customFields: (data.customFields || []).map((f) => ({
@@ -2191,7 +2191,7 @@ app.listen(PORT, () => {
   console.log(`\nSchmidt's Marketing Hot Sheet running on port ${PORT}`);
   console.log(`   Mock mode:  ${MOCK ? "ON (sample data)" : "off"}`);
   console.log(`   Ecwid:      ${ECWID_API_TOKEN ? "configured" : "NOT configured"} (store ${ECWID_STORE_ID})`);
-  console.log(`   GHL:        ${GHL_PIT ? "configured" : "NOT configured"} (location ${GHL_LOCATION_ID})`);
+  console.log(`   Smart 1 Suite: ${GHL_PIT ? "configured" : "NOT configured"} (location ${GHL_LOCATION_ID})`);
   console.log(`   GA4:        ${GA4_PROPERTY_ID && GA_CONFIGURED ? `configured (${OAUTH_CONFIGURED ? "OAuth" : "service account"})` : "NOT configured"}`);
   console.log(`   OpenAI:     ${OPENAI_API_KEY ? "configured" : "NOT configured"} (${OPENAI_MODEL})\n`);
 });
