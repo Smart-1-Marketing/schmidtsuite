@@ -1,7 +1,7 @@
 # Schmidt's Marketing Hot Sheet (Unified Dashboard)
 
 One app that replaces both `schmidtdash-main` (Ecwid dashboard) and
-`schmidtpromo-main` (GHL promotions proxy), and adds Google Analytics and an
+`schmidtpromo-main` (Smart 1 Suite promotions proxy), and adds Google Analytics and an
 AI social-media planner. The server keeps every API token secret — the
 browser only ever talks to this app.
 
@@ -12,7 +12,7 @@ browser only ever talks to this app.
    **Current Promotions** quick summary (this replaced the old
    "What Needs Attention" card).
 2. **Promotions** (second in the menu) — live promo cards from Smart 1 Suite
-   (GoHighLevel opportunities in the *Schmidt Marketing Projects* pipeline,
+   (Smart 1 Suite opportunities in the *Schmidt Marketing Projects* pipeline,
    *Upcoming Events* stage) plus a 30-day Promotion Pipeline.
 3. **Ecommerce** — Ecwid orders, revenue, abandoned carts, order status, top
    products, 12-month revenue chart, discount usage.
@@ -46,7 +46,7 @@ MOCK_MODE=true npm start
 |---|---|
 | `ECWID_STORE_ID` | Ecwid store id (default 111281497) |
 | `ECWID_API_TOKEN` | Ecwid token with `read_orders`, `read_products` |
-| `GHL_PIT` | GoHighLevel Private Integration Token (`pit-…`) with `opportunities.readonly` + `locations/customFields.readonly` |
+| `GHL_PIT` | Smart 1 Suite Private Integration Token (`pit-…`) with `opportunities.readonly` + `locations/customFields.readonly` |
 | `GHL_LOCATION_ID` | `EY0n2rtraCf6EEUKpaEE` |
 | `GA4_PROPERTY_ID` | **GA4 property id** (numeric, from GA Admin → Property Settings). Note: this is *not* the account id 189270321. |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REFRESH_TOKEN` | **GA4 auth option A (no GA admin needed):** reads analytics as your own Google account — plain Viewer access is enough. See "Google Analytics auth" below. |
@@ -116,24 +116,24 @@ Either way, enable the **Google Analytics Data API** on the Cloud project.
 |---|---|
 | `/api/all` | Everything the dashboard needs in one call |
 | `/api/ecwid` | Ecwid metrics |
-| `/api/promotions` | GHL promotions (active/upcoming/ended, classified server-side) |
+| `/api/promotions` | Smart 1 Suite promotions (active/upcoming/ended, classified server-side) |
 | `/api/analytics` | GA4 week-over-week sessions/users/views + top pages/channels |
 | `/api/social` | AI holiday suggestions (`?refresh=1` forces regeneration; otherwise cached 12h) |
 | `/api/review` | Needs-attention items for the Review tab |
-| `/api/pipelines`, `/api/custom-fields` | GHL diagnostics (carried over from the old proxy) |
+| `/api/pipelines`, `/api/custom-fields` | Smart 1 Suite diagnostics (carried over from the old proxy) |
 | `/health` | Health check |
 
 ## Security note (important)
 
-The old `schmidtpromo-main/promo.html` contains a **hard-coded GHL token**
+The old `schmidtpromo-main/promo.html` contains a **hard-coded Smart 1 Suite token**
 (`pit-e475c122-…`) in client-side code. If that page was ever published,
-**rotate that token in GoHighLevel** and use only this server-side app going
+**rotate that token in Smart 1 Suite** and use only this server-side app going
 forward — the new app never exposes tokens to the browser.
 
 ## Notes
 
 - API responses are cached (default 300s, `CACHE_SECONDS`) so Render's free
-  tier and the Ecwid/GHL rate limits stay comfortable; the page auto-refreshes
+  tier and the Ecwid/Smart 1 Suite rate limits stay comfortable; the page auto-refreshes
   every 5 minutes.
 - Conversion rate is computed as Ecwid orders ÷ GA4 sessions, which needs
   both integrations live.
