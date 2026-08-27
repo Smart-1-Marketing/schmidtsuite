@@ -472,7 +472,7 @@
       <div class="section-header">
         <div>
           <h2>Current Promotions</h2>
-          <div class="section-note">Active offers, upcoming promotions and campaign status — live from Smart 1 Suite (GoHighLevel)</div>
+          <div class="section-note">Active offers, upcoming promotions and campaign status — live from Smart 1 Suite</div>
         </div>
         <div>
           <button class="btn" id="toggleEndedBtn">Show Recently Ended</button>
@@ -994,7 +994,7 @@
           <button class="btn" id="draftMailto">Open in Email App</button>
           <button class="btn" id="draftCopy">Copy Email Text</button>
         </div>
-        <p class="note">"Send via Smart 1 Suite" delivers the email through GoHighLevel (it appears in the contact's conversation history) and tags the contact so the same cart never gets the same-stage email twice.</p>
+        <p class="note">"Send via Smart 1 Suite" delivers the email through Smart 1 Suite (it appears in the contact's conversation history) and tags the contact so the same cart never gets the same-stage email twice.</p>
       </div>
     </section>
 
@@ -1212,7 +1212,7 @@
         changeText($("kpiConversionChange"), cr, crPrev, vs);
       }
 
-      // Lead counts from GHL pipelines (new opportunities in the selected period)
+      // Lead counts from Smart 1 Suite pipelines (new opportunities in the selected period)
       const leads = d.leads && !d.leads.error ? d.leads : null;
       const renderLead = (group, valId, chgId) => {
         if (!leads || !leads[group]) {
@@ -1696,7 +1696,7 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
     function closePromoModal() {
       $("promoModal").classList.remove("open");
       $("promoModalBody").innerHTML = ""; // reset the form for next open
-      load(); // pick up the new promotion once the 60s GHL cache rolls over
+      load(); // pick up the new promotion once the 60s Smart 1 Suite cache rolls over
     }
     $("promoModalClose").addEventListener("click", closePromoModal);
     $("promoModal").addEventListener("click", (e) => {
