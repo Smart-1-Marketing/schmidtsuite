@@ -518,13 +518,25 @@ async function resolvePromoScope() {
   return promoScope;
 }
 
+// Always pulls the individual opportunity record rather than trusting the
+// customFields snapshot embedded in /opportunities/search results. The
+// search endpoint is a denormalized index that can lag a few seconds (or
+// longer) behind a just-written field — which is exactly what made a freshly
+// saved "Edit End Date" still read back as the old value/TBD immediately
+// after saving. The single-opportunity GET is the authoritative source, so
+// we pay one extra API call per promo (cheap at this volume, and this whole
+// list is cache-backed for CACHE_SECONDS anyway) to make sure what's on
+// screen always reflects what was actually saved.
 async function enrichIfNeeded(opp) {
-  if (Array.isArray(opp.customFields) && opp.customFields.length) return opp;
   try {
     const data = await ghlGet(`/opportunities/${encodeURIComponent(opp.id)}`);
     const full = data.opportunity || data;
     if (Array.isArray(full.customFields)) opp.customFields = full.customFields;
-  } catch { /* keep as-is */ }
+  } catch {
+    // If the single-record fetch fails for some reason, fall back to
+    // whatever customFields the search result already gave us instead of
+    // dropping the promo entirely.
+  }
   return opp;
 }
 
