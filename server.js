@@ -427,6 +427,29 @@ async function ghlPost(pathName, body, version = GHL_VERSION) {
   return data;
 }
 
+// PUT is used to update fields on an existing opportunity (e.g. editing a
+// promo's end date). Requires the Private Integration Token to have
+// opportunities.write scope, not just opportunities.readonly — see README.
+async function ghlPut(pathName, body, version = GHL_VERSION) {
+  const resp = await fetch(`${GHL_BASE}${pathName}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${GHL_PIT}`, Version: version,
+      Accept: "application/json", "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text().catch(() => "");
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`Smart 1 Suite API ${resp.status}: ${(data.message || text).toString().slice(0, 250)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
 const shortKey = (fk) => String(fk || "").split(".").pop().toLowerCase();
 
 async function resolveFieldIds() {
@@ -567,6 +590,27 @@ async function getPromotions() {
   return remember("promos", { promotions, lastUpdated: new Date().toISOString() });
 }
 
+// Update a promotion's end date directly from the dashboard (the "end date"
+// button on each promo card). Writes back to the same Smart 1 Suite custom
+// field getPromotions() reads (promo_end_date). Requires the GHL_PIT token
+// to carry opportunities.write scope — a readonly-only token will fail here
+// with a 401/403 even though every GET in this file keeps working, since
+// reading and writing are separate scopes in a GHL Private Integration.
+async function updatePromoEndDate(id, endDateStr) {
+  const idMap = await resolveFieldIds();
+  const fieldId = idMap.promo_end_date;
+  if (!fieldId) {
+    throw new Error(
+      "Could not find the \"Promo End Date\" custom field on this Smart 1 Suite pipeline " +
+      "(looked for key promo_end_date) — check PROMO_PIPELINE_NAME/PROMO_STAGE_NAME."
+    );
+  }
+  await ghlPut(`/opportunities/${encodeURIComponent(id)}`, {
+    customFields: [{ id: fieldId, field_value: endDateStr }],
+  });
+  simpleCache.delete("promos");
+}
+
 // ---------- Lead counts from other Smart 1 Suite pipelines ----------
 // Banquet House Request pipeline + combined Catering Menu Request /
 // Catering Requests pipelines, counted by opportunity createdAt per period.
@@ -694,7 +738,23 @@ async function ga4AccessToken() {
         refresh_token: GOOGLE_OAUTH_REFRESH_TOKEN,
       }),
     });
-    if (!resp.ok) throw new Error(`Google OAuth refresh failed: ${resp.status} ${await resp.text()}`);
+    if (!resp.ok) {
+      const bodyText = await resp.text();
+      let hint = "";
+      if (/invalid_grant/i.test(bodyText)) {
+        hint =
+          " — this specific error almost always means the refresh token itself is no longer valid, not a " +
+          "code bug. Most common cause: the Google Cloud OAuth consent screen is still in 'Testing' publishing " +
+          "status, where Google auto-expires every refresh token after 7 days. Fix: (1) quick fix — revisit " +
+          "/auth/google to mint a fresh refresh token (it'll expire again in 7 days if the app is still in " +
+          "Testing), or (2) permanent fix — in Google Cloud Console, go to APIs & Services > OAuth consent " +
+          "screen and publish the app to 'In production' (for a single internal user with the read-only " +
+          "analytics scope this normally doesn't need Google's verification review). Other, less common causes: " +
+          "the Google account's password was changed, access was revoked at myaccount.google.com/permissions, " +
+          "or the OAuth client's secret was rotated in Cloud Console.";
+      }
+      throw new Error(`Google OAuth refresh failed: ${resp.status} ${bodyText}${hint}`);
+    }
     const data = await resp.json();
     gaToken = { token: data.access_token, exp: Date.now() + data.expires_in * 1000 };
     return gaToken.token;
@@ -1180,7 +1240,13 @@ function mockEcwid() {
   };
 }
 
-function mockPromotions() {
+// A persistent array (built once, kept in memory) rather than a fresh object
+// every call, so an end-date edit made through the "Edit End Date" button in
+// MOCK_MODE actually sticks for the rest of the session instead of silently
+// reverting on the next refresh.
+let mockPromoData = null;
+function mockPromotionsList() {
+  if (mockPromoData) return mockPromoData;
   const now = new Date();
   const fmt = (d) => d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   const in5 = new Date(+now + 5 * 86400000);
@@ -1188,33 +1254,54 @@ function mockPromotions() {
   const in21 = new Date(+now + 21 * 86400000);
   const ago20 = new Date(+now - 20 * 86400000);
   const ago6 = new Date(+now - 6 * 86400000);
-  return {
-    promotions: [
-      {
-        id: "mock-1", name: "Bahama Mama Summer Bundle", audience: "Ecommerce",
-        start: fmt(ago20), end: fmt(in5), startISO: ago20.toISOString(), endISO: in5.toISOString(),
-        details: "15% off all Bahama Mama bundles.\n\nPromo Code / Item: BAHAMA15",
-        promoCode: "BAHAMA15", upload: "", contact: "marketing@schmidthaus.com",
-        status: "active", daysLeft: 5,
-      },
-      {
-        id: "mock-2", name: "Oktoberfest Pre-Order Launch", audience: "Restaurant / Ecommerce",
-        start: fmt(in13), end: fmt(in21), startISO: in13.toISOString(), endISO: in21.toISOString(),
-        details: "Early-bird pre-orders for Oktoberfest party platters.",
-        promoCode: "", upload: "", contact: "marketing@schmidthaus.com",
-        status: "upcoming", daysLeft: 21,
-      },
-      {
-        id: "mock-3", name: "Cream Puff Day Flash Sale", audience: "Restaurant",
-        start: fmt(new Date(+now - 9 * 86400000)), end: fmt(ago6),
-        startISO: new Date(+now - 9 * 86400000).toISOString(), endISO: ago6.toISOString(),
-        details: "BOGO cream puffs in-store.\n\nPromo Code / Item: In-store only",
-        promoCode: "In-store only", upload: "", contact: "",
-        status: "ended", daysLeft: -6,
-      },
-    ],
-    lastUpdated: new Date().toISOString(),
-  };
+  const ago35 = new Date(+now - 35 * 86400000);
+  const ago29 = new Date(+now - 29 * 86400000);
+  const ago60 = new Date(+now - 60 * 86400000);
+  const ago50 = new Date(+now - 50 * 86400000);
+  mockPromoData = [
+    {
+      id: "mock-1", name: "Bahama Mama Summer Bundle", audience: "Ecommerce",
+      start: fmt(ago20), end: fmt(in5), startISO: ago20.toISOString(), endISO: in5.toISOString(),
+      details: "15% off all Bahama Mama bundles.\n\nPromo Code / Item: BAHAMA15",
+      promoCode: "BAHAMA15", upload: "", contact: "marketing@schmidthaus.com",
+      status: "active", daysLeft: 5,
+    },
+    {
+      id: "mock-2", name: "Oktoberfest Pre-Order Launch", audience: "Restaurant / Ecommerce",
+      start: fmt(in13), end: fmt(in21), startISO: in13.toISOString(), endISO: in21.toISOString(),
+      details: "Early-bird pre-orders for Oktoberfest party platters.",
+      promoCode: "", upload: "", contact: "marketing@schmidthaus.com",
+      status: "upcoming", daysLeft: 21,
+    },
+    {
+      id: "mock-3", name: "Cream Puff Day Flash Sale", audience: "Restaurant",
+      start: fmt(new Date(+now - 9 * 86400000)), end: fmt(ago6),
+      startISO: new Date(+now - 9 * 86400000).toISOString(), endISO: ago6.toISOString(),
+      details: "BOGO cream puffs in-store.\n\nPromo Code / Item: In-store only",
+      promoCode: "In-store only", upload: "", contact: "",
+      status: "ended", daysLeft: -6,
+    },
+    {
+      id: "mock-4", name: "Back to School Lunch Combo", audience: "Restaurant",
+      start: fmt(ago35), end: fmt(ago29),
+      startISO: ago35.toISOString(), endISO: ago29.toISOString(),
+      details: "Kids' combo half off with any adult entrée.",
+      promoCode: "SCHOOL26", upload: "", contact: "marketing@schmidthaus.com",
+      status: "ended", daysLeft: -29,
+    },
+    {
+      id: "mock-5", name: "Founders Day Catering Discount", audience: "Catering",
+      start: fmt(ago60), end: fmt(ago50),
+      startISO: ago60.toISOString(), endISO: ago50.toISOString(),
+      details: "10% off catering orders over $250 booked for Founders Day weekend.",
+      promoCode: "FOUNDERS10", upload: "", contact: "",
+      status: "ended", daysLeft: -50,
+    },
+  ];
+  return mockPromoData;
+}
+function mockPromotions() {
+  return { promotions: mockPromotionsList(), lastUpdated: new Date().toISOString() };
 }
 
 function mockAnalytics() {
@@ -2134,6 +2221,35 @@ app.get("/api/config", (req, res) =>
 
 app.get("/api/ecwid", safe(() => getEcwidData()));
 app.get("/api/promotions", safe(() => getPromotions()));
+
+// Edit a promotion's end date right from its card. Gated behind the same
+// owner sign-in as the Ecom Tools admin actions (product edits, discount
+// codes, etc.) since it's a direct write against Smart 1 Suite, not just a
+// read. Setting a past date is exactly how a promo is retired: classifyPromo
+// will mark it "ended" on the next load, which is what drops it out of the
+// Promotion Pipeline and into the new Past Promotions list.
+app.put("/api/promotions/:id/end-date", requireAdmin, express.json(), safe(async (req) => {
+  const id = req.params.id;
+  const endDate = String(req.body?.endDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    throw Object.assign(new Error("endDate must be in YYYY-MM-DD format."), { status: 400 });
+  }
+  if (MOCK) {
+    const list = mockPromotionsList();
+    const p = list.find((x) => x.id === id);
+    if (!p) throw Object.assign(new Error("Promotion not found."), { status: 404 });
+    const cls = classifyPromo(p.start, endDate);
+    p.end = formatDateValue(endDate);
+    p.endISO = cls.endDate ? cls.endDate.toISOString() : null;
+    p.status = cls.status;
+    p.daysLeft = cls.daysLeft;
+    return { ok: true, id, promotion: p, mock: true };
+  }
+  if (!GHL_PIT) throw Object.assign(new Error("Smart 1 Suite is not configured (GHL_PIT missing)."), { status: 400 });
+  await updatePromoEndDate(id, endDate);
+  return { ok: true, id, endDate };
+}));
+
 app.get("/api/leads", safe(() => getLeads()));
 app.get("/api/analytics", safe(() => getAnalytics()));
 app.get("/api/social", safe((req) => getSocialSuggestions(req.query.refresh === "1")));

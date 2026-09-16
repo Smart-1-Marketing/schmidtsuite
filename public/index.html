@@ -137,13 +137,30 @@
     .detail-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
     .detail-value { font-weight: bold; }
     .promo-buttons { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+    /* Compact row style shared by the Promotion Pipeline and Past Promotions
+       lists — smaller font/padding so ~10 rows fit without scrolling. */
     .pipeline-row {
-      display: grid; grid-template-columns: 95px 1fr auto; gap: 14px;
-      align-items: center; border-bottom: 1px solid #eeeeee; padding: 14px 0;
+      display: grid; grid-template-columns: 78px 1fr auto; gap: 10px;
+      align-items: center; border-bottom: 1px solid #eeeeee; padding: 8px 0;
+      font-size: 13px;
     }
     .pipeline-row:last-child { border-bottom: 0; }
-    .pipeline-date { font-weight: bold; color: var(--red); }
-    .pipeline-sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .pipeline-row strong { font-size: 13px; }
+    .pipeline-date { font-weight: bold; color: var(--red); font-size: 12px; }
+    .pipeline-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+    .pipeline-list { max-height: 420px; overflow-y: auto; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+    .end-date-field { margin-top: 6px; }
+    .end-date-edit { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .end-date-edit input[type="date"] {
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font-size: 13px;
+    }
+    .tab-link {
+      border: 1px solid var(--border); background: transparent; padding: 11px 18px;
+      border-radius: 25px; cursor: pointer; color: #444; font-weight: 600;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .tab-link:hover { background: #f2f2f2; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th {
@@ -359,6 +376,7 @@
       <button class="tab" data-tab="calendar">Campaign Calendar</button>
       <button class="tab" data-tab="social">Social Media</button>
       <button class="tab" data-tab="review">Review<span class="count" id="reviewCount" style="display:none;">0</span></button>
+      <a class="tab-link" href="https://smart1.agency/tools/image-picker/pick/Lqv3m_BTCH9R2Wy591F4h3OjEPNnly-oumF0CG6fTsk#saved" target="_blank" rel="noopener">Upload Assets ↗</a>
       <!-- Ecom Tools — the store tabs, shown in this menu once signed in -->
       <span class="tab-sep" id="adminSep" style="display:none;"></span>
       <div class="tab-dropdown" id="ecomDropdown" style="display:none;">
@@ -482,13 +500,22 @@
       <div class="promo-grid" id="promoGrid">
         <div class="empty-note">Loading promotions…</div>
       </div>
-      <!-- PROMOTION PIPELINE -->
-      <div class="card" style="margin-top:18px;">
-        <div class="section-header">
-          <h3 style="margin:0;">Promotion Pipeline</h3>
-          <div class="section-note">Next 30 days</div>
+      <!-- PROMOTION PIPELINE + PAST PROMOTIONS, side by side -->
+      <div class="two-column" style="margin-top:18px;">
+        <div class="card">
+          <div class="section-header">
+            <h3 style="margin:0;">Promotion Pipeline</h3>
+            <div class="section-note">Next 30 days</div>
+          </div>
+          <div id="pipelineRows" class="pipeline-list"><div class="empty-note">Loading…</div></div>
         </div>
-        <div id="pipelineRows"><div class="empty-note">Loading…</div></div>
+        <div class="card">
+          <div class="section-header">
+            <h3 style="margin:0;">Past Promotions</h3>
+            <div class="section-note">Most recently ended</div>
+          </div>
+          <div id="pastPromoRows" class="pipeline-list"><div class="empty-note">Loading…</div></div>
+        </div>
       </div>
     </section>
 
@@ -1284,6 +1311,16 @@
             <div>
               <div class="detail-label">Ends</div>
               <div class="detail-value">${esc(p.end || "TBD")}</div>
+              ${ADMIN_SIGNED_IN ? `
+              <div class="end-date-field">
+                <button class="btn btn-sm" id="endBtn-${esc(p.id)}" onclick="toggleEndDateEdit('${esc(p.id)}')">Edit End Date</button>
+                <div class="end-date-edit" id="endEdit-${esc(p.id)}" style="display:none;">
+                  <input type="date" id="endInput-${esc(p.id)}" value="${p.endISO ? esc(p.endISO.slice(0, 10)) : ""}" />
+                  <button class="btn btn-sm btn-primary" onclick="saveEndDate('${esc(p.id)}')">Save</button>
+                  <button class="btn btn-sm" onclick="toggleEndDateEdit('${esc(p.id)}')">Cancel</button>
+                </div>
+                <div class="msg" id="endMsg-${esc(p.id)}"></div>
+              </div>` : ""}
             </div>
             ${p.audience ? `
             <div>
@@ -1299,12 +1336,51 @@
         </article>`;
     }
 
+    // ---------------- edit a promo's end date (owner-only) ----------------
+    function toggleEndDateEdit(id) {
+      const box = $("endEdit-" + id);
+      if (!box) return;
+      const open = box.style.display !== "none";
+      box.style.display = open ? "none" : "flex";
+      $("endBtn-" + id).style.display = open ? "" : "none";
+    }
+    async function saveEndDate(id) {
+      const input = $("endInput-" + id);
+      const msgEl = $("endMsg-" + id);
+      const endDate = input.value;
+      if (!endDate) {
+        msgEl.className = "msg err"; msgEl.textContent = "Pick a date first.";
+        return;
+      }
+      const btn = document.querySelector(`#endEdit-${id} .btn-primary`);
+      if (btn) btn.disabled = true;
+      try {
+        await adminApi(`/api/promotions/${encodeURIComponent(id)}/end-date`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endDate }),
+        });
+        msgEl.className = "msg ok";
+        const isPast = new Date(endDate + "T23:59:59") < new Date();
+        msgEl.textContent = isPast
+          ? "Saved — this promotion is now marked ended and has moved to Past Promotions."
+          : "Saved.";
+        await load(); // pick up the change everywhere (grid, pipeline, past list, KPIs)
+      } catch (e) {
+        msgEl.className = "msg err";
+        msgEl.textContent = e.message === "Signed out" ? "Sign in again to save." : e.message;
+        if (btn) btn.disabled = false;
+      }
+    }
+
     function renderPromotions(d) {
       const grid = $("promoGrid");
       const pipe = $("pipelineRows");
+      const past = $("pastPromoRows");
       if (d.promotions?.error) {
         grid.innerHTML = `<div class="empty-note">Couldn't load promotions: ${esc(d.promotions.error)}</div>`;
         pipe.innerHTML = '<div class="empty-note">—</div>';
+        past.innerHTML = '<div class="empty-note">—</div>';
         return;
       }
       const promos = d.promotions.promotions || [];
@@ -1313,7 +1389,10 @@
         ? visible.map(promoCard).join("")
         : '<div class="empty-note">No promotions to show.</div>';
 
-      // Pipeline: date-ordered promo starts/ends over next 30 days
+      // Pipeline: date-ordered promo starts/ends over next 30 days.
+      // Capped to 10 rows (smaller font above keeps that from needing scroll)
+      // — an ended promo's "ends" event naturally drops out here as soon as
+      // its end date is in the past, which is how it "falls off the calendar".
       const now = new Date();
       const horizon = new Date(+now + 30 * 86400000);
       const events = [];
@@ -1337,7 +1416,7 @@
       });
       events.sort((a, b) => a.date - b.date);
       pipe.innerHTML = events.length
-        ? events.map((e) => `
+        ? events.slice(0, 10).map((e) => `
           <div class="pipeline-row">
             <div class="pipeline-date">${fmtDay(e.date)}</div>
             <div>
@@ -1347,6 +1426,24 @@
             <span class="badge ${e.badge}">${e.badgeText}</span>
           </div>`).join("")
         : '<div class="empty-note">Nothing scheduled in the next 30 days.</div>';
+
+      // Past Promotions: everything classified "ended" server-side, most
+      // recently ended first, capped to 10 rows.
+      const ended = promos
+        .filter((p) => p.status === "ended" && p.endISO)
+        .sort((a, b) => new Date(b.endISO) - new Date(a.endISO))
+        .slice(0, 10);
+      past.innerHTML = ended.length
+        ? ended.map((p) => `
+          <div class="pipeline-row">
+            <div class="pipeline-date">${fmtDay(p.endISO)}</div>
+            <div>
+              <strong>${esc(p.name)}</strong>
+              <div class="pipeline-sub">${esc(p.audience || "Promotion")}${p.promoCode ? " • " + esc(p.promoCode) : ""}</div>
+            </div>
+            <span class="badge badge-red">Ended</span>
+          </div>`).join("")
+        : '<div class="empty-note">No past promotions yet.</div>';
     }
 
     function renderEcommerce(d) {
@@ -1731,6 +1828,7 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
     // rejects anything without a valid session cookie.
     // ============================================================
     let ADMIN_READY = false;   // data for the owner tabs has been loaded once
+    let ADMIN_SIGNED_IN = false;   // gates the "Edit End Date" button on promo cards
 
     function showMsg(id, text, ok) {
       const el = $(id);
@@ -1752,6 +1850,10 @@ This uses your OpenAI credits — roughly a few cents per picture.`)) return;
       $("adminSep").style.display = on ? "" : "none";
       $("ecomDropdown").style.display = on ? "" : "none";
       $("ownerBtn").textContent = on ? "Sign Out of Ecom Tools" : "Ecom Tools Sign In";
+      ADMIN_SIGNED_IN = on;
+      // re-render promo cards so the "Edit End Date" button appears/disappears
+      // immediately on sign in/out, without waiting for the next refresh
+      if (DATA) renderPromotions(DATA);
       if (!on) {
         ADMIN_READY = false;
         // never leave an owner panel on screen after signing out

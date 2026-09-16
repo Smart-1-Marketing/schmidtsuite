@@ -46,7 +46,7 @@ MOCK_MODE=true npm start
 |---|---|
 | `ECWID_STORE_ID` | Ecwid store id (default 111281497) |
 | `ECWID_API_TOKEN` | Ecwid token with `read_orders`, `read_products` |
-| `GHL_PIT` | Smart 1 Suite Private Integration Token (`pit-…`) with `opportunities.readonly` + `locations/customFields.readonly` |
+| `GHL_PIT` | Smart 1 Suite Private Integration Token (`pit-…`) with `opportunities.readonly` + `locations/customFields.readonly`, **plus `opportunities.write`** — required for the "Edit End Date" button on each promo card (Promotions tab) to save back to Smart 1 Suite. A readonly-only token still loads every promotion fine; only that one write action needs the extra scope, and fails with a 401/403 without it. Regenerate the token (or add the scope to the existing one) at Smart 1 Suite → Settings → Private Integrations. |
 | `GHL_LOCATION_ID` | `EY0n2rtraCf6EEUKpaEE` |
 | `GA4_PROPERTY_ID` | **GA4 property id** (numeric, from GA Admin → Property Settings). Note: this is *not* the account id 189270321. |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REFRESH_TOKEN` | **GA4 auth option A (no GA admin needed):** reads analytics as your own Google account — plain Viewer access is enough. See "Google Analytics auth" below. |
@@ -103,6 +103,27 @@ access you already have on the client's property.
 Caveat: this is tied to your Google login; if your access to the property is
 removed, the Analytics tab stops working.
 
+**Seeing `Google OAuth refresh failed: 400 { "error": "invalid_grant" }`?**
+This means the refresh token itself is no longer valid — it's not a code
+bug, and re-deploying won't fix it. By far the most common cause: the
+Google Cloud OAuth consent screen is still in **Testing** publishing
+status, where Google auto-expires every refresh token after 7 days,
+regardless of how often the app uses it. Two fixes:
+1. **Quick fix, temporary:** revisit `/auth/google` on the deployed app to
+   mint a fresh refresh token and update `GOOGLE_OAUTH_REFRESH_TOKEN` —
+   this will expire again in 7 days if the app is still in Testing.
+2. **Permanent fix:** in Google Cloud Console → APIs & Services → OAuth
+   consent screen, publish the app to **"In production."** For a single
+   internal user on the read-only analytics scope, this normally doesn't
+   trigger Google's verification review — it's Testing status specifically
+   that carries the 7-day refresh-token expiry, not anything about scopes.
+
+Less common causes of the same error: the Google account's password was
+changed, access was revoked at
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions),
+or the OAuth client's secret was rotated in Cloud Console — any of these
+also means step 1 above (re-authorize at `/auth/google`) is the fix.
+
 **Option B — Service account.** Create a service account key in Google Cloud
 (IAM & Admin → Service Accounts → Keys → JSON), paste the whole JSON into
 `GOOGLE_SERVICE_ACCOUNT_JSON`, and have a GA **administrator** add the
@@ -117,6 +138,7 @@ Either way, enable the **Google Analytics Data API** on the Cloud project.
 | `/api/all` | Everything the dashboard needs in one call |
 | `/api/ecwid` | Ecwid metrics |
 | `/api/promotions` | Smart 1 Suite promotions (active/upcoming/ended, classified server-side) |
+| `PUT /api/promotions/:id/end-date` | Owner-only. Body `{"endDate":"YYYY-MM-DD"}`. Updates the promo's end date in Smart 1 Suite; a past date retires it (moves it into "ended" on the next load). Requires sign-in (same as the Ecom Tools admin actions) and `GHL_PIT` with `opportunities.write` scope. |
 | `/api/analytics` | GA4 week-over-week sessions/users/views + top pages/channels |
 | `/api/social` | AI holiday suggestions (`?refresh=1` forces regeneration; otherwise cached 12h) |
 | `/api/review` | Needs-attention items for the Review tab |
