@@ -47,6 +47,13 @@ const {
   PROMO_STAGE_NAME = "Upcoming Events",
   BRAND_NAME = "Schmidt's Sausage Haus",
   SITE_URL = "schmidthaus.com",
+  // Everything below describes THIS client. Set them per deployment and the
+  // same codebase serves any customer — nothing about the business should be
+  // written into the prompts themselves.
+  BRAND_DESCRIPTION = "a family-owned German restaurant in Columbus, Ohio's historic German Village, famous for Bahama Mama sausages and cream puffs, with three business lines: the restaurant, catering, and food trucks",
+  BRAND_SHORT = "a German restaurant in Columbus",
+  BRAND_IMAGE_STYLE = "natural window light, shallow depth of field, inviting and real — like a good phone photo from a busy dining room, not a stock advert. Warm wood, hearty plates, a little Bavarian character",
+  BRAND_RULES = "",
   PROMO_FORM_URL = "https://api.leadconnectorhq.com/widget/form/HiSs6ID0Yw8nu5ISjech",
   BANQUET_PIPELINE_NAME = "Banquet House Request",
   CATERING_PIPELINE_NAMES = "Catering Menu Request,Catering Requests",
@@ -1051,12 +1058,12 @@ app.get("/auth/google/callback", async (req, res) => {
 const SOCIAL_CACHE_MS = 12 * 60 * 60 * 1000; // refresh twice a day
 let socialCache = { at: 0, data: null };
 
-const SOCIAL_SYSTEM_PROMPT = `You are the marketing planner for Schmidt's Sausage Haus (schmidthaus.com), a beloved family-owned German restaurant in Columbus, Ohio's historic German Village, with three business lines: the restaurant (famous for Bahama Mamas and cream puffs), catering, and food trucks. Respond ONLY with valid JSON.`;
+const SOCIAL_SYSTEM_PROMPT = `You are the marketing planner for ${BRAND_NAME} (${SITE_URL}), ${BRAND_DESCRIPTION}. ${BRAND_RULES} Respond ONLY with valid JSON.`;
 
 function socialUserPrompt() {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  return `Today is ${today}. List the 8 best upcoming social-media/food holidays and observances over the next 60 days that Schmidt's Sausage Haus could tie promotions to (e.g., National Bratwurst Day, Oktoberfest, National Dessert Day, Labor Day, National Food Truck Day). For each, give a realistic date, and concrete tie-in ideas. Return JSON in exactly this shape:
-{"suggestions":[{"holiday":"","date":"YYYY-MM-DD","why":"one sentence on why it fits Schmidt's","businessLines":["restaurant"|"catering"|"foodtrucks"],"promoIdea":"one-sentence promotion tied to schmidthaus.com","samplePost":"a ready-to-use social post under 250 characters including a call to action to schmidthaus.com"}]}
+  return `Today is ${today}. List the 8 best upcoming social-media/food holidays and observances over the next 60 days that ${BRAND_NAME} could tie promotions to (e.g., National Bratwurst Day, Oktoberfest, National Dessert Day, Labor Day, National Food Truck Day). For each, give a realistic date, and concrete tie-in ideas. Return JSON in exactly this shape:
+{"suggestions":[{"holiday":"","date":"YYYY-MM-DD","why":"one sentence on why it fits ${BRAND_NAME}","businessLines":["restaurant"|"catering"|"foodtrucks"],"promoIdea":"one-sentence promotion tied to ${SITE_URL}","samplePost":"a ready-to-use social post under 250 characters including a call to action to ${SITE_URL}"}]}
 Order by date ascending. Only include dates in the next 60 days.`;
 }
 
@@ -2004,16 +2011,16 @@ async function buildRecoveryDraft(cart, couponCode) {
   const fallback = () => {
     const codeLine = couponCode ? `\n\nUse code ${couponCode} at checkout for a little something extra on us.` : "";
     if (tier === "New") return {
-      subject: "Your Schmidt's order is waiting for you",
-      body: `Hi ${firstName},\n\nLooks like you left some goodies behind — ${itemList} are still in your cart at schmidthaus.com.\n\nYour cart is saved and ready whenever you are. If you hit a snag checking out, just reply and we'll help.${codeLine}\n\nDanke schön,\nSchmidt's Sausage Haus`,
+      subject: `Your ${BRAND_NAME} order is waiting for you`,
+      body: `Hi ${firstName},\n\nLooks like you left some goodies behind — ${itemList} are still in your cart at ${SITE_URL}.\n\nYour cart is saved and ready whenever you are. If you hit a snag checking out, just reply and we'll help.${codeLine}\n\nThanks,\n${BRAND_NAME}`,
     };
     if (tier === "Warm") return {
-      subject: "Still thinking it over? Your Schmidt's cart is saved",
-      body: `Hi ${firstName},\n\nYour cart with ${itemList} ($${cart.total.toFixed(2)}) is still saved at schmidthaus.com.${codeLine}\n\nOur Bahama Mamas don't stay on shelves long — finish your order while everything's still in stock.\n\nProst,\nSchmidt's Sausage Haus`,
+      subject: `Still thinking it over? Your ${BRAND_NAME} cart is saved`,
+      body: `Hi ${firstName},\n\nYour cart with ${itemList} ($${cart.total.toFixed(2)}) is still saved at ${SITE_URL}.${codeLine}\n\nPopular items don't stay in stock long — finish your order while everything's still there.\n\nThanks,\n${BRAND_NAME}`,
     };
     return {
-      subject: "Last call — your Schmidt's cart is about to expire",
-      body: `Hi ${firstName},\n\nJust a heads-up: the cart you started at schmidthaus.com (${itemList}) will expire soon.${codeLine}\n\nIf you'd still like your order, now's the time — after that we can't guarantee the items or the price.\n\nWe'd love to get some Schmidt's on your table,\nSchmidt's Sausage Haus`,
+      subject: `Last call — your ${BRAND_NAME} cart is about to expire`,
+      body: `Hi ${firstName},\n\nJust a heads-up: the cart you started at ${SITE_URL} (${itemList}) will expire soon.${codeLine}\n\nIf you'd still like your order, now's the time — after that we can't guarantee the items or the price.\n\nWe'd love to get your order on its way,\n${BRAND_NAME}`,
     };
   };
 
@@ -2028,7 +2035,7 @@ async function buildRecoveryDraft(cart, couponCode) {
         response_format: { type: "json_object" },
         temperature: 0.7,
         messages: [
-          { role: "system", content: "You write short, warm cart-recovery emails for Schmidt's Sausage Haus (schmidthaus.com), a family-owned German restaurant and online store in Columbus, Ohio. Plain text only, no HTML, no placeholders like [Name]. Sign off as Schmidt's Sausage Haus. Respond ONLY with JSON: {\"subject\":\"\",\"body\":\"\"}." },
+          { role: "system", content: `You write short, warm cart-recovery emails for ${BRAND_NAME} (${SITE_URL}), ${BRAND_DESCRIPTION}. Plain text only, no HTML, no placeholders like [Name]. ${BRAND_RULES} Sign off as ${BRAND_NAME}. Respond ONLY with JSON: {"subject":"","body":""}.` },
           { role: "user", content: `Write a cart recovery email.\nCustomer first name: ${firstName}\nCart items: ${itemList}\nCart value: $${cart.total.toFixed(2)}\nCart age: ${daysOld} day(s) — tone: ${tone}\n${couponCode ? `Discount code to include: ${couponCode}` : "No discount code — do not invent one."}\nKeep it under 130 words.` },
         ],
       }),
@@ -2169,11 +2176,9 @@ app.post("/api/social/image", requireAdmin, express.json(), safe(async (req) => 
   const size = IMAGE_SIZES[b.size] || IMAGE_SIZES.square;
 
   const prompt =
-    `A warm, appetising social media photo for ${BRAND_NAME}, a lakeside winery in Thornville, Ohio ` +
-    `with a tasting room, patio, live music and a food menu.\n` +
-    `Occasion: ${holiday}\nWhat we're promoting: ${idea}\n` +
-    `Style: natural daylight or golden-hour lakeside light, shallow depth of field, inviting and real — ` +
-    `like a good phone photo from the patio, not a stock advert. Warm wood, wine glasses, greenery.\n` +
+    `A warm, appetising social media photo for ${BRAND_NAME}, ${BRAND_DESCRIPTION}.` +
+    `\nOccasion: ${holiday}\nWhat we're promoting: ${idea}` +
+    `\nStyle: ${BRAND_IMAGE_STYLE}.\n` +
     `Important: no text, no words, no lettering, no logos, and no watermarks anywhere in the image. ` +
     `No people's faces in close-up.`;
 
@@ -2321,5 +2326,7 @@ app.listen(PORT, () => {
   console.log(`   Ecwid:      ${ECWID_API_TOKEN ? "configured" : "NOT configured"} (store ${ECWID_STORE_ID})`);
   console.log(`   Smart 1 Suite: ${GHL_PIT ? "configured" : "NOT configured"} (location ${GHL_LOCATION_ID})`);
   console.log(`   GA4:        ${GA4_PROPERTY_ID && GA_CONFIGURED ? `configured (${OAUTH_CONFIGURED ? "OAuth" : "service account"})` : "NOT configured"}`);
-  console.log(`   OpenAI:     ${OPENAI_API_KEY ? "configured" : "NOT configured"} (${OPENAI_MODEL})\n`);
+  console.log(`   OpenAI:     ${OPENAI_API_KEY ? "configured" : "NOT configured"} (${OPENAI_MODEL})`);
+  console.log(`   Ecom tools: ${ADMIN_PASSWORD ? "password protected" : "OFF (set ADMIN_PASSWORD to enable them)"}`);
+  console.log(`   Brand:      ${BRAND_NAME} — ${BRAND_SHORT}\n`);
 });
